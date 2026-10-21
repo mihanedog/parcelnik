@@ -382,7 +382,15 @@ function renderClick(kn,pa,latlng){
     <button type="button" id="copyId">${ic('copy')} Kopiraj ID ${esc(ko)}-${esc(pn)}</button>
     <button type="button" id="copyLink">${ic('link')} Kopiraj povezavo</button>
   </div>
-  <p class="note">Izpis je brezplačen, zahteva pa prijavo v eZK s <b>SI-PASS</b> (smsPASS, Rekono ali potrdilo). Če še nisi prijavljen, se odpre prijava: prijavi se, nato gumb klikni znova. Ročno: k.o. <b>${esc(ko)}</b>, parcela <b>${esc(pn)}</b>.</p>
+  <details class="note" style="margin-top:8px"><summary style="cursor:pointer;color:var(--accent-ink)">Prvič v eZK? Kaj klikniti</summary>
+  <ol style="margin:6px 0 0;padding-left:18px;line-height:1.5">
+    <li>Odpre se <b>SI-PASS</b>: izberi smsPASS, Rekono ali potrdilo in se prijavi (prijava je brezplačna).</li>
+    <li>»Prijavi se kot <b>zunanji uporabnik</b>«.</li>
+    <li>Položaj: »<b>fizična oseba z EMŠO</b>« → <b>Nadaljuj</b>. (Prvič: »želim se registrirati kot samostojni uporabnik«, skupina »stranka – posameznik«, VEP preskoči.)</li>
+    <li>»<b>Prijavi se in nadaljuj s postopki</b>«.</li>
+    <li>Vrni se sem in klikni <b>Redni izpis ZK (PDF)</b> še enkrat. Seja ostane prijavljena, naslednjič gre v enem kliku.</li>
+  </ol>
+  <p style="margin:6px 0 0">Brez klikanja v 2.–5. koraku: namesti <a href="https://github.com/mihanedog/parcelnik/raw/main/parcelnik-ezk.user.js" target="_blank" rel="noopener">parcelnik-ezk.user.js</a> (Tampermonkey) in uporabi gumb <b>eZK javni izpisi</b>; skript po SI-PASS vse opravi sam. Ročno: k.o. <b>${esc(ko)}</b>, parcela <b>${esc(pn)}</b>.</p></details>
   <p class="note" style="font-family:var(--mono)">E ${E.toFixed(2)} N ${N.toFixed(2)} (D96/TM) · ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}</p></div>`;
   showInfo(head,body);
   const cp=(txt,btn)=>{ navigator.clipboard?.writeText(txt).then(()=>{const o=btn.innerHTML;btn.innerHTML=ic('ok')+' Kopirano';setTimeout(()=>btn.innerHTML=o,1500);}).catch(()=>{prompt('Kopiraj:',txt);}); };
