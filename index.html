@@ -108,6 +108,24 @@ a{color:var(--accent-ink)}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 
+/* podatkovni sloji */
+.sub{margin:2px 0 8px 23px;padding:8px 10px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.sub[hidden]{display:none}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;font-size:12.5px}
+.row.wrap{flex-wrap:wrap}
+.row>label:first-child:not(.pill){min-width:46px;color:var(--fg-3)}
+.row select,.row input[type=number]{border:1px solid var(--line);background:var(--panel-2);border-radius:5px;padding:3px 6px;min-width:0;width:80px;font-size:12.5px}
+.row select{width:auto;max-width:160px}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:2px 8px 2px 4px;font-size:12px;cursor:pointer;background:var(--panel-2)}
+.pill input{accent-color:var(--accent);margin:0}
+.cnt{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+.list{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.list div{padding:5px 6px;border-radius:5px;cursor:pointer;font-size:12.5px;line-height:1.3}
+.list div:hover{background:var(--accent-2)}
+.list small{color:var(--fg-3);display:block;font-family:var(--mono);font-size:11px}
+.etn-lbl{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font:11px var(--mono);color:var(--fg);white-space:nowrap;box-shadow:var(--shadow)}
+.kme-ic{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#f0a30a;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.kme-ic.off{background:#9aa}
 /* bottom status */
 .status{position:absolute;z-index:1000;left:max(16px,env(safe-area-inset-left,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:center;font-family:var(--mono);font-size:11.5px;color:var(--fg-2);
   background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;box-shadow:var(--shadow);max-width:calc(100% - 32px);overflow:hidden;white-space:nowrap}
@@ -152,6 +170,33 @@ a{color:var(--accent-ink)}
   <header><span>Sloji</span><button class="x" id="dockClose" aria-label="Zapri">✕</button></header>
   <div class="body">
     <div class="base" id="basemaps"></div>
+    <div class="grp" id="dataLayers">
+      <h4>Podatkovni sloji</h4>
+      <div class="lay"><input type="checkbox" id="l_etn"><span class="sw" style="background:#d64f8c"></span><label for="l_etn">Prodaje nepremičnin (ETN)</label><span class="cnt" id="etnCnt"></span></div>
+      <div class="sub" id="etnFilters" hidden>
+        <div class="row"><label>Leto</label><select id="etnY0"></select><span>–</span><select id="etnY1"></select></div>
+        <div class="row wrap" id="etnKinds">
+          <label class="pill"><input type="checkbox" value="stan" checked> stanovanja</label>
+          <label class="pill"><input type="checkbox" value="hisa" checked> hiše</label>
+          <label class="pill"><input type="checkbox" value="posl" checked> poslovni, drugi deli stavb</label>
+          <label class="pill"><input type="checkbox" value="zst" checked> stavbna zemljišča</label>
+          <label class="pill"><input type="checkbox" value="zkm" checked> kmetijska</label>
+          <label class="pill"><input type="checkbox" value="zgo" checked> gozdna</label>
+          <label class="pill"><input type="checkbox" value="zdr" checked> druga zemljišča</label>
+        </div>
+        <div class="row"><label>Cena €</label><input type="number" id="etnC0" placeholder="od" min="0"><input type="number" id="etnC1" placeholder="do" min="0"></div>
+        <div class="row"><label>€/m²</label><input type="number" id="etnM0" placeholder="od" min="0"><input type="number" id="etnM1" placeholder="do" min="0"></div>
+        <div class="row"><label class="pill"><input type="checkbox" id="etnTrz" checked> samo tržne prodaje</label></div>
+        <p class="note" id="etnNote"></p>
+      </div>
+      <div class="lay"><input type="checkbox" id="l_kme"><span class="sw" style="background:#f0a30a"></span><label for="l_kme">Kmetijska zemljišča naprodaj (UE)</label><span class="cnt" id="kmeCnt"></span></div>
+      <div class="sub" id="kmeFilters" hidden>
+        <div class="row"><label>UE</label><select id="kmeUE"><option value="">vse upravne enote</option></select></div>
+        <div class="row"><label>Vrsta</label><select id="kmeV"><option value="">vse</option><option>kmetijsko zemljišče</option><option>kmetija</option><option>gozd</option></select></div>
+        <p class="note" id="kmeNote"></p>
+        <div id="kmeList" class="list"></div>
+      </div>
+    </div>
     <div id="layers"></div>
     <div class="grp"><p class="note">Vsi sloji so javne storitve <a href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener">GURS</a> (CC BY 4.0) in <a href="https://www.gov.si/drzavni-organi/ministrstva/ministrstvo-za-naravne-vire-in-prostor/" target="_blank" rel="noopener">MNVP</a>. Parcele in stavbe se izrišejo pri merilu pod 1 : 10 000.</p></div>
   </div>
@@ -370,15 +415,13 @@ function renderClick(kn,pa,latlng){
       body+=`<dl class="kv">${k.map(([a,b])=>`<dt>${esc(a.toLowerCase().replace(/_naziv_sl|_sl$/,'').replace(/_/g,' '))}</dt><dd class="m">${esc(b)}</dd>`).join('')}</dl>`; });
     body+=`</div>`;
   }
+  if(parc) body+=`<div class="sec" id="etnParc"><h3>Prodaje te parcele (ETN)</h3><p class="note"><span class="spin"></span> iščem …</p></div>`;
   // povezave
   const ko=parc?parc.KO_ID:'', pn=parc?parc.ST_PARCELE:'';
   body+=`<div class="sec"><h3>Uradni izpisi in viri</h3><div class="links">
     ${parc?`<button type="button" class="p" id="zkPdf" style="background:var(--accent);color:#fff;border-color:var(--accent)">${ic('doc')} Redni izpis ZK (PDF)</button>
     <a href="https://esodisce.si/evlozisce/javni_izpisi/list.html#parcelnik=${esc(ko)}:${encodeURIComponent(pn)}" target="_blank" rel="noopener">${ic('doc')} eZK javni izpisi</a>`:`<a class="p" href="https://esodisce.si/vash/ivs/access/ezk" target="_blank" rel="noopener">${ic('doc')} Zemljiška knjiga (eZK)</a>`}
     <a href="https://ipi.eprostor.gov.si/jv/" target="_blank" rel="noopener">${ic('map')} Javni vpogled GURS</a>
-    <a href="https://www.gov.si/teme/trg-nepremicnin" target="_blank" rel="noopener">${ic('eur')} Trg nepremičnin (ETN)</a>
-    <a href="https://kmetijska-zemljisca.datatart.com/" target="_blank" rel="noopener">${ic('farm')} Kmetijska zemljišča naprodaj (UE)</a>
-    <a href="https://e-uprava.gov.si/si/e-uprava/oglasnadeska.html" target="_blank" rel="noopener">${ic('board')} Oglasna deska e-uprava</a>
     <button type="button" id="copyId">${ic('copy')} Kopiraj ID ${esc(ko)}-${esc(pn)}</button>
     <button type="button" id="copyLink">${ic('link')} Kopiraj povezavo</button>
   </div>
@@ -396,6 +439,7 @@ function renderClick(kn,pa,latlng){
   const cp=(txt,btn)=>{ navigator.clipboard?.writeText(txt).then(()=>{const o=btn.innerHTML;btn.innerHTML=ic('ok')+' Kopirano';setTimeout(()=>btn.innerHTML=o,1500);}).catch(()=>{prompt('Kopiraj:',txt);}); };
   document.getElementById('copyId').onclick=ev=>cp(`${ko}-${pn}`,ev.currentTarget);
   document.getElementById('zkPdf')?.addEventListener('click',()=>zkIzpis(ko,pn));
+  if(parc) etnForParcel(parc).catch(()=>{});
   document.getElementById('copyLink').onclick=ev=>{writeHash();cp(location.href,ev.currentTarget);};
   writeHash();
 }
@@ -475,6 +519,109 @@ document.getElementById('dockClose').onclick=()=>tg.click();
 if(matchMedia('(max-width:760px)').matches){dock.hidden=true;tg.setAttribute('aria-pressed','false');}
 document.getElementById('tgLoc').onclick=()=>map.locate({setView:true,maxZoom:18});
 map.on('locationfound',e=>L.circleMarker(e.latlng,{radius:7,color:'#2b6cff',fillOpacity:.3}).addTo(map));
+
+
+/* ====================== ETN: prodaje nepremičnin ====================== */
+const ETN={idx:null,cache:new Map(),layer:L.layerGroup(),on:false,min:12,recs:[]};
+map.createPane('p_etn'); map.getPane('p_etn').style.zIndex=680;
+const etnEl={on:document.getElementById('l_etn'),f:document.getElementById('etnFilters'),y0:document.getElementById('etnY0'),y1:document.getElementById('etnY1'),c0:document.getElementById('etnC0'),c1:document.getElementById('etnC1'),m0:document.getElementById('etnM0'),m1:document.getElementById('etnM1'),trz:document.getElementById('etnTrz'),note:document.getElementById('etnNote'),cnt:document.getElementById('etnCnt')};
+function etnKind(r){
+  if(r.t==='s'){ const x=(r.raba||'').toLowerCase(); if(/stanovanje|stanovanj/.test(x)&&!/hi[šs]a/.test(x)) return 'stan'; if(/hi[šs]a|enostanovanjsk|dvostanovanjsk|vrstna|samostoje/.test(x)) return 'hisa'; return 'posl'; }
+  const x=(r.vzn||'').toLowerCase(); if(/gradi|stavb|komunal/.test(x)) return 'zst'; if(/kmetij|njiv|travn|sadovn|vinograd/.test(x)) return 'zkm'; if(/gozd/.test(x)) return 'zgo'; return 'zdr';
+}
+const KIND_COL={stan:'#d64f8c',hisa:'#e07b2a',posl:'#7a5cc7',zst:'#2b8ad6',zkm:'#3aa655',zgo:'#1f6b3a',zdr:'#8a8f93'};
+const KIND_NAME={stan:'stanovanje',hisa:'hiša',posl:'del stavbe',zst:'stavbno zemljišče',zkm:'kmetijsko zemljišče',zgo:'gozd',zdr:'zemljišče'};
+async function etnIndex(){ if(ETN.idx) return ETN.idx; try{ ETN.idx=await fetch('data/etn/index.json',{cache:'no-cache'}).then(r=>r.json()); }catch(e){ ETN.idx={years:{}}; }
+  const ys=Object.keys(ETN.idx.years).sort(); [etnEl.y0,etnEl.y1].forEach(sel=>{sel.innerHTML=ys.map(y=>`<option>${y}</option>`).join('');}); if(ys.length){etnEl.y0.value=ys[Math.max(0,ys.length-3)];etnEl.y1.value=ys[ys.length-1];}
+  return ETN.idx; }
+function etnFilters(){ const kinds=new Set([...document.querySelectorAll('#etnKinds input:checked')].map(i=>i.value)); return {y0:+etnEl.y0.value||0,y1:+etnEl.y1.value||9999,kinds,c0:+etnEl.c0.value||0,c1:+etnEl.c1.value||Infinity,m0:+etnEl.m0.value||0,m1:+etnEl.m1.value||Infinity,trz:etnEl.trz.checked}; }
+async function etnLoadCell(y,key){ const k=y+'/'+key; if(ETN.cache.has(k)) return ETN.cache.get(k); const pr=fetch(`data/etn/${y}/${key}.json`).then(r=>r.ok?r.json():[]).catch(()=>[]); ETN.cache.set(k,pr); return pr; }
+let etnBusy=false;
+async function etnRefresh(){
+  if(!ETN.on) return; const idx=await etnIndex(); const f=etnFilters();
+  if(map.getZoom()<ETN.min){ ETN.layer.clearLayers(); etnEl.note.textContent='Približaj zemljevid (vsaj zoom 12), da se prikažejo prodaje.'; etnEl.cnt.textContent=''; return; }
+  if(etnBusy) return; etnBusy=true;
+  try{
+    const b=map.getBounds(); const [e0,n0]=toD96(b.getSouth(),b.getWest()), [e1,n1]=toD96(b.getNorth(),b.getEast()); const C=idx.cell||10000;
+    const cells=[]; for(let cx=Math.floor(Math.min(e0,e1)/C);cx<=Math.floor(Math.max(e0,e1)/C);cx++) for(let cy=Math.floor(Math.min(n0,n1)/C);cy<=Math.floor(Math.max(n0,n1)/C);cy++) cells.push(`${cx}_${cy}`);
+    const years=Object.keys(idx.years).map(Number).filter(y=>y>=f.y0&&y<=f.y1);
+    const jobs=[]; for(const y of years){ const have=new Set(idx.years[y].cells||[]); for(const c of cells) if(have.has(c)) jobs.push(etnLoadCell(y,c)); }
+    const all=(await Promise.all(jobs)).flat();
+    ETN.layer.clearLayers(); let n=0, shown=0; const LIMIT=3000; ETN.recs=[];
+    for(const r of all){
+      const k=etnKind(r); if(!f.kinds.has(k)) continue; if(f.trz&&r.trz!=='5'&&r.trz!=='') continue;
+      const cena=r.cena??r.cena_posla; if(cena!=null&&(cena<f.c0||cena>f.c1)) continue; if(r.m2!=null&&(r.m2<f.m0||r.m2>f.m1)) continue; if(r.m2==null&&(f.m0>0||f.m1<Infinity)) continue;
+      const [lat,lng]=fromD96(r.e,r.nn); if(!b.contains([lat,lng])) continue; n++; if(shown>=LIMIT) continue; shown++;
+      const m=L.circleMarker([lat,lng],{radius:r.t==='s'?6:5,color:'#fff',weight:1.2,fillColor:KIND_COL[k],fillOpacity:.9,pane:'p_etn'}).addTo(ETN.layer);
+      const lbl=r.m2!=null?(r.t==='s'?`${fmtNum(r.m2)} €/m²`:`${r.m2.toLocaleString('sl-SI',{maximumFractionDigits:1})} €/m²`):(cena!=null?`${fmtNum(cena)} €`:'');
+      if(lbl) m.bindTooltip(lbl,{direction:'top',offset:[0,-6],className:'etn-lbl'});
+      m.on('click',ev=>{L.DomEvent.stop(ev);etnShow(r,[lat,lng]);});
+      ETN.recs.push(r);
+    }
+    etnEl.cnt.textContent=n?`${fmtNum(n)}`:''; etnEl.note.textContent=n>LIMIT?`Prikazanih ${LIMIT} od ${fmtNum(n)} prodaj v pogledu – približaj ali zoži filtre.`:(n?`${fmtNum(n)} prodaj v pogledu`:'V tem pogledu ni prodaj, ki ustrezajo filtrom.');
+  } finally { etnBusy=false; }
+}
+function etnShow(r,ll){
+  const k=etnKind(r); const cena=r.cena??r.cena_posla; const S=ETN.idx?.sifranti||{};
+  const vp=(S['Vrsta kupoprodajnega posla']||{})[r.vp]||r.vp, trz=(S['Tržnost posla']||{})[r.trz]||r.trz;
+  const head=`<div class="eyebrow">Prodaja · ${esc(KIND_NAME[k])}${r.n>1?` · paket ${r.n} nepremičnin`:''}</div><h2>${cena!=null?fmtNum(cena)+' €':'cena ni navedena'}</h2><div class="sub">${r.m2!=null?`<b>${r.t==='s'?fmtNum(r.m2):r.m2.toLocaleString('sl-SI',{maximumFractionDigits:1})} €/m²</b> · `:''}${esc(r.dat||'')}</div>`;
+  let body=`<dl class="kv">`;
+  if(r.t==='s'){ body+=`<dt>Vrsta</dt><dd>${esc(r.raba||'—')}</dd>${r.nas?`<dt>Naslov</dt><dd>${esc(r.nas)}</dd>`:''}<dt>Stavba / del</dt><dd class="m">${esc(r.ko)}-${esc(r.st)}-${esc(r.ds)} <small style="color:var(--fg-3)">k.o. ${esc(r.kon)}</small></dd>
+    <dt>Prodana površina</dt><dd class="m">${r.pov!=null?fmtNum(r.pov)+' m²':'—'}${r.upov?` <small style="color:var(--fg-3)">(uporabna ${fmtNum(r.upov)} m²)</small>`:''}</dd>
+    ${r.leto_i?`<dt>Leto izgradnje</dt><dd class="m">${esc(r.leto_i)}</dd>`:''}${r.nad?`<dt>Nadstropje</dt><dd>${esc(r.nad)}</dd>`:''}${r.sobe?`<dt>Sobe</dt><dd class="m">${esc(r.sobe)}</dd>`:''}${r.novo?`<dt>Novogradnja</dt><dd>da</dd>`:''}`; }
+  else { body+=`<dt>Parcela</dt><dd class="m">${esc(r.ko)}-${esc(r.parc)} <small style="color:var(--fg-3)">k.o. ${esc(r.kon)}</small></dd><dt>Vrsta zemljišča</dt><dd>${esc(r.vzn||'—')}</dd><dt>Površina</dt><dd class="m">${r.pov!=null?fmtNum(r.pov)+' m²':'—'}</dd>${r.nasad?`<dt>Trajni nasad</dt><dd>${esc(r.nasad)}</dd>`:''}`; }
+  if(r.delez&&r.delez!=='1/1') body+=`<dt>Prodani delež</dt><dd class="m">${esc(r.delez)}</dd>`;
+  if(r.n>1) body+=`<dt>Cena posla</dt><dd class="m">${r.cena_posla!=null?fmtNum(r.cena_posla)+' €':'—'} <small style="color:var(--fg-3)">za ${r.n} nepremičnin${r.pov_posla?`, skupaj ${fmtNum(r.pov_posla)} m²`:''}</small></dd>`;
+  body+=`<dt>Posel</dt><dd>${esc(vp)}${r.ag?' · prek agencije':''}${r.ddv?' · z DDV':''}</dd><dt>Tržnost</dt><dd>${esc(trz)}</dd><dt>Občina</dt><dd>${esc(r.ob||'')}</dd><dt>ID posla</dt><dd class="m">${r.id}</dd>${r.op?`<dt>Opombe</dt><dd>${esc(r.op)}</dd>`:''}</dl>`;
+  body+=`<div class="links"><button type="button" id="etnParcBtn">${ic('map')} Pokaži parcelo</button></div><p class="note">Vir: GURS, Evidenca trga nepremičnin (CC BY 4.0). Podatke sporočajo pogodbene stranke; cene so pogodbene, €/m² je izračunan iz prodane površine.</p>`;
+  showInfo(head,body);
+  document.getElementById('etnParcBtn').onclick=()=>map.fire('click',{latlng:L.latLng(ll)});
+}
+etnEl.on.onchange=async e=>{ ETN.on=e.target.checked; etnEl.f.hidden=!ETN.on; if(ETN.on){ ETN.layer.addTo(map); await etnIndex(); etnRefresh(); } else { map.removeLayer(ETN.layer); etnEl.cnt.textContent=''; } };
+etnEl.f.addEventListener('change',()=>etnRefresh()); etnEl.f.addEventListener('input',e=>{ if(e.target.type==='number'){ clearTimeout(etnEl.t); etnEl.t=setTimeout(etnRefresh,400);} });
+map.on('moveend',()=>etnRefresh());
+
+/* prodaje konkretne parcele (v panelu parcele) */
+async function etnForParcel(parc){
+  const box=document.getElementById('etnParc'); if(!box) return; const idx=await etnIndex(); const C=idx.cell||10000;
+  const key=`${Math.floor(parc.E_CEN/C)}_${Math.floor(parc.N_CEN/C)}`; let poly=hiLayer.getLayers()[0]?.feature?.geometry; if(!poly){ const f=await fetchParcelGeom(parc.KO_ID,parc.ST_PARCELE); poly=f?.geometry; }
+  const years=Object.keys(idx.years); const all=(await Promise.all(years.filter(y=>(idx.years[y].cells||[]).includes(key)).map(y=>etnLoadCell(y,key)))).flat();
+  const hits=all.filter(r=>(r.t==='z'&&String(r.ko)===String(parc.KO_ID)&&r.parc===parc.ST_PARCELE)||(r.t==='s'&&poly&&pip({lat:fromD96(r.e,r.nn)[0],lng:fromD96(r.e,r.nn)[1]},poly))).sort((a,b)=>(b.dat||'').localeCompare(a.dat||''));
+  if(!box.isConnected) return;
+  if(!years.length){ box.innerHTML='<h3>Prodaje te parcele (ETN)</h3><p class="note">Podatki ETN še niso naloženi.</p>'; return; }
+  if(!hits.length){ box.innerHTML=`<h3>Prodaje te parcele (ETN)</h3><p class="note">Ni evidentiranih prodaj v letih ${years[0]}–${years[years.length-1]}.</p>`; return; }
+  box.innerHTML=`<h3>Prodaje te parcele (ETN)</h3><div class="list">`+hits.slice(0,12).map((r,i)=>`<div data-i="${i}"><b>${(r.cena??r.cena_posla)!=null?fmtNum(r.cena??r.cena_posla)+' €':'cena ni navedena'}</b> · ${esc(r.dat||'')}${r.m2!=null?` · ${fmtNum(r.m2)} €/m²`:''}<small>${esc(r.t==='s'?(r.raba||'del stavbe')+(r.pov?` · ${fmtNum(r.pov)} m²`:''):(r.vzn||'zemljišče')+(r.pov?` · ${fmtNum(r.pov)} m²`:''))}${r.n>1?` · paket ${r.n}`:''}</small></div>`).join('')+`</div>`;
+  box.querySelectorAll('.list div').forEach(d=>d.onclick=()=>{const r=hits[+d.dataset.i];etnShow(r,fromD96(r.e,r.nn));});
+}
+
+/* ====================== Kmetijska zemljišča naprodaj (UE) ====================== */
+const KME={data:null,layer:L.layerGroup(),on:false};
+map.createPane('p_kme'); map.getPane('p_kme').style.zIndex=690;
+const kmeEl={on:document.getElementById('l_kme'),f:document.getElementById('kmeFilters'),ue:document.getElementById('kmeUE'),v:document.getElementById('kmeV'),note:document.getElementById('kmeNote'),list:document.getElementById('kmeList'),cnt:document.getElementById('kmeCnt')};
+const kmeIcon=L.divIcon({className:'',html:'<div class="kme-ic"></div>',iconSize:[22,22],iconAnchor:[11,22],popupAnchor:[0,-20]});
+async function kmeLoad(){ if(KME.data) return KME.data; try{ KME.data=await fetch('data/kmetijska.geojson',{cache:'no-cache'}).then(r=>r.json()); }catch(e){ KME.data={features:[]}; }
+  const ues=[...new Set(KME.data.features.map(f=>f.properties.ue).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'sl')); kmeEl.ue.innerHTML='<option value="">vse upravne enote</option>'+ues.map(u=>`<option>${esc(u)}</option>`).join(''); return KME.data; }
+function kmeRefresh(){
+  if(!KME.on) return; const ue=kmeEl.ue.value, v=kmeEl.v.value; KME.layer.clearLayers();
+  const fs=KME.data.features.filter(f=>(!ue||f.properties.ue===ue)&&(!v||f.properties.vrsta===v)).sort((a,b)=>(b.properties.pub||'').split('.').reverse().join('').localeCompare((a.properties.pub||'').split('.').reverse().join('')));
+  let loc=0; fs.forEach(f=>{ if(!f.geometry) return; loc++; const m=L.marker([f.geometry.coordinates[1],f.geometry.coordinates[0]],{icon:kmeIcon,pane:'p_kme'}).addTo(KME.layer); const p=f.properties;
+    m.bindTooltip(`${esc(p.ko?.name||'')}${p.cena?` · ${fmtNum(p.cena)} €`:''}`,{direction:'top',offset:[0,-20],className:'etn-lbl'}); m.on('click',()=>kmeShow(f)); });
+  kmeEl.cnt.textContent=fs.length?String(fs.length):''; kmeEl.note.textContent=`${fs.length} ponudb (${loc} z lokacijo na zemljevidu, ${fs.length-loc} brez – samo v seznamu). Stanje: ${KME.data.updated||'—'}.`;
+  kmeEl.list.innerHTML=fs.slice(0,300).map((f,i)=>`<div data-i="${i}">${esc(f.properties.ko?.name||f.properties.title)}${f.properties.cena?` · <b>${fmtNum(f.properties.cena)} €</b>`:''}${f.geometry?'':' · <span style="color:var(--fg-3)">brez lokacije</span>'}<small>${esc(f.properties.ue||'')} · objava ${esc(f.properties.pub||'')} · do ${esc(f.properties.do||'')}</small></div>`).join('');
+  kmeEl.list.querySelectorAll('div[data-i]').forEach(d=>d.onclick=()=>{const f=fs[+d.dataset.i]; if(f.geometry) map.setView([f.geometry.coordinates[1],f.geometry.coordinates[0]],Math.max(map.getZoom(),15)); kmeShow(f);});
+}
+function kmeShow(f){
+  const p=f.properties;
+  const head=`<div class="eyebrow">Ponudba za prodajo · ${esc(p.vrsta||'kmetijsko zemljišče')}</div><h2 style="font-family:var(--font);font-size:18px">${esc(p.ko?`k.o. ${p.ko.id?p.ko.id+' ':''}${p.ko.name}`:p.title)}</h2><div class="sub">${esc(p.ue||'')} · objava ${esc(p.pub||'')}${p.do?` · <b>sprejem do ${esc(p.do)}</b>`:''}</div>`;
+  let body=`<dl class="kv"><dt>Cena</dt><dd class="m">${p.cena!=null?fmtNum(p.cena)+' €':'—'}${p.m2!=null?` <small style="color:var(--fg-3)">(${p.m2.toLocaleString('sl-SI',{maximumFractionDigits:2})} €/m²)</small>`:''}</dd><dt>Površina</dt><dd class="m">${p.pov!=null?fmtNum(Math.round(p.pov))+' m²':'—'}</dd><dt>Št. dokumenta</dt><dd class="m">${esc(p.doc||'')}</dd></dl>`;
+  if(p.parcels?.length){ const geo=new Map((p.geo_parcels||[]).map(g=>[g.p,g])); body+=`<div class="sec"><h3>Parcele (${p.parcels.length})</h3><div class="links" id="kmeParc">`+p.parcels.map(x=>`<button type="button" data-p="${esc(x)}" ${geo.has(x)?'':'disabled title="ni najdena v katastru"'}>${esc(x)}${geo.has(x)?` <small>${fmtNum(geo.get(x).pov)} m²</small>`:''}</button>`).join('')+`</div></div>`; }
+  body+=`<div class="sec"><h3>Dokument</h3><div class="links">${p.pdf?`<a class="p" href="${esc(p.pdf)}" target="_blank" rel="noopener">${ic('doc')} Odpri ponudbo (PDF)</a>`:''}<a href="https://e-uprava.gov.si/si/e-uprava/oglasnadeska/podrobnosti-objave.html?id=${esc(p.id)}" target="_blank" rel="noopener">${ic('board')} Objava na e-upravi</a></div>
+  <p class="note">${p.ocr?'Cena, površina in parcele so prebrane iz skeniranega PDF-ja (OCR) in so informativne; merodajen je PDF. ':''}Izjavo o sprejemu ponudbe vložiš na upravni enoti v 30 dneh od objave (ZKZ, 20. člen).</p></div>`;
+  showInfo(head,body);
+  document.querySelectorAll('#kmeParc button:not([disabled])').forEach(b=>b.onclick=async()=>{ const g=(p.geo_parcels||[]).find(x=>x.p===b.dataset.p); const f=await fetchParcelGeom(g.ko,g.p); if(f) map.fitBounds(hiLayer.getBounds(),{maxZoom:18,padding:[40,40]}); });
+}
+kmeEl.on.onchange=async e=>{ KME.on=e.target.checked; kmeEl.f.hidden=!KME.on; if(KME.on){ KME.layer.addTo(map); await kmeLoad(); kmeRefresh(); } else { map.removeLayer(KME.layer); kmeEl.cnt.textContent=''; } };
+kmeEl.ue.onchange=kmeEl.v.onchange=()=>kmeRefresh();
 
 /* deep link ?p=KO:ST */
 if(hp.get('p')){ const [ko,st]=hp.get('p').split(':'); fetchParcelGeom(ko,st).then(f=>{ if(f){ map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); setTimeout(()=>map.fire('click',{latlng:centroidOf(f)}),500);} }); }
