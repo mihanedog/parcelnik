@@ -13,9 +13,17 @@ Odprt, brezplačen pregledovalnik prostora za vso Slovenijo. Ena sama statična 
 - koordinate D96/TM in WGS84, merilo, deljiva povezava na parcelo (`#zoom/lat/lng?p=KO:parcela`)
 - gumbi do uradnih virov: zemljiška knjiga (e-Sodstvo), javni vpogled GURS, trg nepremičnin (ETN), ponudbe kmetijskih zemljišč na UE
 
+**Izpis iz zemljiške knjige (lastniki)**
+
+Lastniki niso javen podatek GURS; so v zemljiški knjigi (eZK), kamor se od 2026 prijaviš izključno s **SI-PASS** (smsPASS, Rekono ali digitalno potrdilo). Parcelnik zato ne hrani nobenih gesel in ne more prenesti izpisa »namesto tebe«; lahko pa ti prihrani vse klikanje:
+
+1. Klik na parcelo → gumb **Redni izpis ZK (PDF)**. Parcelnik pošlje obrazec 03-001 (k.o. + parcela) naravnost v eZK v nov zavihek. Če si v eZK že prijavljen, se PDF odpre takoj. Če nisi, se odpre prijava SI-PASS; po prijavi klikni gumb znova.
+2. Če tvoj brskalnik pri takem klicu seje ne pošlje (strožje nastavitve piškotkov), namesti `parcelnik-ezk.user.js` v Tampermonkey/Violentmonkey. Gumb **eZK javni izpisi** potem odpre eZK z `#parcelnik=KO:PARCELA`, skript izpolni obrazec in zahteva PDF. Vse teče v tvojem brskalniku, s tvojo sejo.
+
+Parcelnik prikaže tudi, kar je o lastništvu javno v katastru: število lastnikov, koliko je pravnih oseb in ali je lastnik RS ali občina.
+
 **Česa ne more (in zakaj)**
 
-- *Lastniki* niso javen podatek: do njih prideš samo z brezplačno registracijo v e-Sodstvu (gumb v panelu te pelje tja, ID znak parcele skopiraš z enim klikom). Množičnega oziroma API dostopa do zemljiške knjige ni.
 - *Cene prodanih nepremičnin (ETN)* GURS objavlja kot prosti prenos CSV (aplikacija JGP), ne kot WMS/WFS. Sloj s cenami bo prišel, ko bo pripravljen nočni skript, ki CSV pretvori v GeoJSON (glej »Načrt«).
 - *Ponudbe za prodajo kmetijskih zemljišč* upravne enote objavljajo na oglasni deski e-uprave kot PDF, brez API-ja. Trenutno je povezava na zunanji agregator in oglasno desko.
 

@@ -373,7 +373,8 @@ function renderClick(kn,pa,latlng){
   // povezave
   const ko=parc?parc.KO_ID:'', pn=parc?parc.ST_PARCELE:'';
   body+=`<div class="sec"><h3>Uradni izpisi in viri</h3><div class="links">
-    <a class="p" href="https://evlozisce.sodisce.si/esodstvo/index.html" target="_blank" rel="noopener">${ic('doc')} Zemljiška knjiga (e-Sodstvo)</a>
+    ${parc?`<button type="button" class="p" id="zkPdf" style="background:var(--accent);color:#fff;border-color:var(--accent)">${ic('doc')} Redni izpis ZK (PDF)</button>
+    <a href="https://esodisce.si/evlozisce/javni_izpisi/list.html#parcelnik=${esc(ko)}:${encodeURIComponent(pn)}" target="_blank" rel="noopener">${ic('doc')} eZK javni izpisi</a>`:`<a class="p" href="https://esodisce.si/vash/ivs/access/ezk" target="_blank" rel="noopener">${ic('doc')} Zemljiška knjiga (eZK)</a>`}
     <a href="https://ipi.eprostor.gov.si/jv/" target="_blank" rel="noopener">${ic('map')} Javni vpogled GURS</a>
     <a href="https://www.gov.si/teme/trg-nepremicnin" target="_blank" rel="noopener">${ic('eur')} Trg nepremičnin (ETN)</a>
     <a href="https://kmetijska-zemljisca.datatart.com/" target="_blank" rel="noopener">${ic('farm')} Kmetijska zemljišča naprodaj (UE)</a>
@@ -381,13 +382,23 @@ function renderClick(kn,pa,latlng){
     <button type="button" id="copyId">${ic('copy')} Kopiraj ID ${esc(ko)}-${esc(pn)}</button>
     <button type="button" id="copyLink">${ic('link')} Kopiraj povezavo</button>
   </div>
-  <p class="note">Lastništvo je v zemljiški knjigi: v e-Sodstvu izberi <i>Javni vpogled → Redni izpis</i> in vnesi k.o. <b>${esc(ko)}</b>, parcela <b>${esc(pn)}</b>. Vpogled je brezplačen, zahteva pa enkratno registracijo.</p>
+  <p class="note">Izpis je brezplačen, zahteva pa prijavo v eZK s <b>SI-PASS</b> (smsPASS, Rekono ali potrdilo). Če še nisi prijavljen, se odpre prijava: prijavi se, nato gumb klikni znova. Ročno: k.o. <b>${esc(ko)}</b>, parcela <b>${esc(pn)}</b>.</p>
   <p class="note" style="font-family:var(--mono)">E ${E.toFixed(2)} N ${N.toFixed(2)} (D96/TM) · ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}</p></div>`;
   showInfo(head,body);
   const cp=(txt,btn)=>{ navigator.clipboard?.writeText(txt).then(()=>{const o=btn.innerHTML;btn.innerHTML=ic('ok')+' Kopirano';setTimeout(()=>btn.innerHTML=o,1500);}).catch(()=>{prompt('Kopiraj:',txt);}); };
   document.getElementById('copyId').onclick=ev=>cp(`${ko}-${pn}`,ev.currentTarget);
+  document.getElementById('zkPdf')?.addEventListener('click',()=>zkIzpis(ko,pn));
   document.getElementById('copyLink').onclick=ev=>{writeHash();cp(location.href,ev.currentTarget);};
   writeHash();
+}
+/* Redni izpis iz ZK (03-001): navaden POST na eZK v nov zavihek; sejo pošlje brskalnik, če si prijavljen s SI-PASS. */
+function zkIzpis(ko,pn){
+  const f=document.createElement('form'); f.method='post'; f.action='https://esodisce.si/evlozisce/javni_izpisi/03-001.html'; f.target='_blank'; f.style.display='none';
+  const add=(n,v)=>{const i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);};
+  add('nacinList','IDZNAK'); add('tipNepList.nobind','1'); add('tipNep','1'); add('nacinIskanja','IDZNAK');
+  add('idZnakNep.katastrskaObcina.idsrcsifrant',String(ko)); add('idZnakNep.parcelnaStevilkaNovo',String(pn));
+  add('idZnakNep.stevilkaStavbe',''); add('idZnakNep.stPosameznegaDela',''); add('idZnakNep.stevilkaVS',''); add('idNep',''); add('_evendId_pdf','');
+  document.body.appendChild(f); f.submit(); setTimeout(()=>f.remove(),2000);
 }
 function ic(n){const d={doc:'M3 1h7l3 3v11H3z M6 8h4M6 11h4',map:'M2 4l4-2 4 2 4-2v10l-4 2-4-2-4 2z',eur:'M11 4a4 4 0 100 8M2 6h7M2 9h7',farm:'M2 14V7l6-4 6 4v7M6 14V9h4v5',board:'M2 3h12v8H2zM6 14h4M8 11v3',copy:'M5 5h8v9H5zM3 11V2h8',link:'M6 10l4-4M4 8L2.5 9.5a2.5 2.5 0 003.5 3.5L7.5 11.5M9 4.5l1.5-1.5a2.5 2.5 0 013.5 3.5L12.5 8',ok:'M3 8l3 3 7-7'}[n];return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="${d}"/></svg>`;}
 
