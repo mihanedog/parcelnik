@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Parcelnik</title>
+<meta name="description" content="Odprt pregledovalnik parcel, stavb, namenske rabe in omejitev za vso Slovenijo, zgrajen na javnih storitvah GURS in MNVP.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: full-bleed map; left dock (search + layers) on desktop, bottom sheet on phone; info panel slides from the right. */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --panel-2:#eef2f0; --fg:#15201b; --fg-2:#4b5a53; --fg-3:#7a877f;
+  --line:#d5ddd8; --accent:#1f7a4d; --accent-2:#e4f2ea; --accent-ink:#0f5a36;
+  --warn:#9a5b00; --warn-2:#fff3df; --hl:#ff7a00;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:8px; --shadow:0 6px 24px rgba(10,25,18,.14);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1512; --panel:#172019; --panel-2:#1f2a23; --fg:#e8eee9; --fg-2:#aab6ae; --fg-3:#7d8a82;
+    --line:#2b3831; --accent:#4fbf84; --accent-2:#173526; --accent-ink:#8fe0b4;
+    --warn:#f0b35a; --warn-2:#3a2a10; --hl:#ff9a3c; --shadow:0 6px 24px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1512; --panel:#172019; --panel-2:#1f2a23; --fg:#e8eee9; --fg-2:#aab6ae; --fg-3:#7d8a82;
+  --line:#2b3831; --accent:#4fbf84; --accent-2:#173526; --accent-ink:#8fe0b4;
+  --warn:#f0b35a; --warn-2:#3a2a10; --hl:#ff9a3c; --shadow:0 6px 24px rgba(0,0,0,.5);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--font);overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--accent-ink)}
+#map{position:absolute;inset:0;background:var(--bg)}
+.leaflet-container{font:inherit}
+
+/* top bar */
+.topbar{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;z-index:1000;display:flex;gap:8px;align-items:center;
+  padding:10px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));pointer-events:none}
+.topbar>*{pointer-events:auto}
+.brand{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:7px 11px;box-shadow:var(--shadow);font-weight:600;letter-spacing:.01em;white-space:nowrap}
+.brand svg{width:18px;height:18px}
+.search{flex:1;max-width:560px;display:flex;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);position:relative;min-width:0}
+.search input{flex:1;min-width:0;border:0;background:transparent;padding:9px 12px;outline:none}
+.search input:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+.search button{border:0;background:transparent;padding:0 12px;cursor:pointer;color:var(--fg-2)}
+.search button:hover{color:var(--accent-ink)}
+.sugg{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);max-height:50vh;overflow:auto;z-index:5}
+.sugg div{padding:8px 12px;cursor:pointer;border-top:1px solid var(--line)}
+.sugg div:first-child{border-top:0}
+.sugg div:hover,.sugg div.on{background:var(--accent-2)}
+.sugg small{display:block;color:var(--fg-3);font-family:var(--mono);font-size:11px}
+.iconbtn{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.iconbtn[aria-pressed="true"]{background:var(--accent-2);border-color:var(--accent)}
+.iconbtn svg{width:16px;height:16px}
+
+/* layer dock */
+.dock{position:absolute;z-index:1000;left:max(16px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 58px);width:300px;max-height:calc(100% - 90px - env(safe-area-inset-top,0px));
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.dock[hidden]{display:none}
+.dock header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600}
+.dock .body{overflow:auto;padding:6px 0 10px}
+.grp{padding:6px 12px 2px}
+.grp h4{margin:8px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.lay{display:flex;align-items:center;gap:8px;padding:4px 0}
+.lay input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;margin:0}
+.lay label{flex:1;cursor:pointer}
+.lay .sw{width:14px;height:14px;border-radius:3px;flex:none;border:1px solid var(--line)}
+.lay input[type=range]{width:70px;accent-color:var(--accent)}
+.base{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px 12px 4px}
+.base button{border:1px solid var(--line);background:var(--panel-2);border-radius:6px;padding:6px 4px;cursor:pointer;font-size:12px}
+.base button[aria-pressed="true"]{background:var(--accent-2);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+
+/* info panel */
+.info{position:absolute;z-index:1001;right:max(16px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 58px);width:380px;max-width:calc(100% - 32px);
+  max-height:calc(100% - 90px - env(safe-area-inset-top,0px));background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.info[hidden]{display:none}
+.info header{padding:12px 14px 10px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:flex-start}
+.info header .t{flex:1;min-width:0}
+.info header .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.info header h2{margin:2px 0 0;font-size:22px;line-height:1.15;font-family:var(--mono);font-weight:500;text-wrap:balance}
+.info header .sub{color:var(--fg-2);margin-top:2px}
+.x{border:0;background:transparent;cursor:pointer;padding:4px;color:var(--fg-3);border-radius:6px}
+.x:hover{background:var(--panel-2);color:var(--fg)}
+.info .body{overflow:auto;padding:4px 14px 14px}
+.kv{display:grid;grid-template-columns:minmax(110px,38%) 1fr;gap:4px 10px;margin:8px 0}
+.kv dt{color:var(--fg-3);font-size:12.5px;padding-top:1px}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.kv dd.m{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sec{border-top:1px solid var(--line);padding-top:8px;margin-top:10px}
+.sec h3{margin:0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);font-weight:600;display:flex;align-items:center;gap:6px}
+.chip{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;background:var(--accent-2);color:var(--accent-ink);font-family:var(--mono)}
+.chip.w{background:var(--warn-2);color:var(--warn)}
+.links{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.links a,.links button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:6px;padding:6px 10px;text-decoration:none;color:var(--fg);background:var(--panel-2);font-size:13px;cursor:pointer}
+.links a.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.links svg{width:13px;height:13px}
+.note{font-size:12px;color:var(--fg-2);margin:8px 0 0}
+.empty{padding:18px 14px;color:var(--fg-2)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* bottom status */
+.status{position:absolute;z-index:1000;left:max(16px,env(safe-area-inset-left,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:center;font-family:var(--mono);font-size:11.5px;color:var(--fg-2);
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;box-shadow:var(--shadow);max-width:calc(100% - 32px);overflow:hidden;white-space:nowrap}
+.status b{color:var(--fg);font-weight:500}
+.leaflet-control-attribution{font-size:10px;background:var(--panel)!important;color:var(--fg-2)!important}
+.leaflet-control-attribution a{color:var(--accent-ink)!important}
+.leaflet-bar a{background:var(--panel)!important;color:var(--fg)!important;border-bottom-color:var(--line)!important}
+.leaflet-bottom.leaflet-right{margin-bottom:env(safe-area-inset-bottom,0px)}
+.leaflet-control-scale-line{background:var(--panel)!important;color:var(--fg)!important;border-color:var(--fg-2)!important}
+.leaflet-top.leaflet-left{top:calc(env(safe-area-inset-top,0px) + 58px);left:max(16px,env(safe-area-inset-left,0px))}
+.dock:not([hidden]) ~ .leaflet-container .leaflet-top.leaflet-left{left:332px}
+
+@media (max-width:760px){
+  .brand span{display:none}
+  .topbar{flex-wrap:nowrap}
+  .dock{left:0;right:0;top:auto;bottom:0;width:auto;max-height:55%;border-radius:12px 12px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .info{left:0;right:0;top:auto;bottom:0;width:auto;max-width:none;max-height:62%;border-radius:12px 12px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .info .body,.dock .body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .status{display:none}
+  .dock:not([hidden]) ~ .leaflet-container .leaflet-top.leaflet-left{left:max(16px,env(safe-area-inset-left,0px))}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="topbar">
+  <div class="brand" title="Parcelnik — odprt pregledovalnik prostora">
+    <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M2 5l6-2 5 2 5-2v12l-5 2-5-2-6 2z"/><path d="M8 3v12M13 5v12"/></svg>
+    <span>Parcelnik</span>
+  </div>
+  <form class="search" id="sform" autocomplete="off" role="search">
+    <input id="q" placeholder="k.o. + parcela (850 430/17), naslov ali kraj" aria-label="Iskanje">
+    <button type="submit" aria-label="Išči"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button>
+    <div class="sugg" id="sugg" hidden></div>
+  </form>
+  <button class="iconbtn" id="tgLayers" aria-pressed="true" title="Sloji"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2l6 3-6 3-6-3z"/><path d="M2 8l6 3 6-3M2 11l6 3 6-3"/></svg><span class="lbl">Sloji</span></button>
+  <button class="iconbtn" id="tgLoc" title="Moja lokacija"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/></svg></button>
+</div>
+
+<aside class="dock" id="dock">
+  <header><span>Sloji</span><button class="x" id="dockClose" aria-label="Zapri">✕</button></header>
+  <div class="body">
+    <div class="base" id="basemaps"></div>
+    <div id="layers"></div>
+    <div class="grp"><p class="note">Vsi sloji so javne storitve <a href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener">GURS</a> (CC BY 4.0) in <a href="https://www.gov.si/drzavni-organi/ministrstva/ministrstvo-za-naravne-vire-in-prostor/" target="_blank" rel="noopener">MNVP</a>. Parcele in stavbe se izrišejo pri merilu pod 1 : 10 000.</p></div>
+  </div>
+</aside>
+
+<aside class="info" id="info" hidden>
+  <header>
+    <div class="t" id="infoHead"></div>
+    <button class="x" id="infoClose" aria-label="Zapri">✕</button>
+  </header>
+  <div class="body" id="infoBody"></div>
+</aside>
+
+<div class="status" id="status"><span id="stCoord">—</span><span>·</span><span id="stScale"></span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js"></script>
+<script>
+/* ---------- konfiguracija virov ---------- */
+const SRC = {
+  kn:  'https://ipi.eprostor.gov.si/wms-si-gurs-kn/ows',
+  knWfs:'https://ipi.eprostor.gov.si/wfs-si-gurs-kn/wfs',
+  rnWfs:'https://ipi.eprostor.gov.si/wfs-si-gurs-rn/wfs',
+  dts: 'https://ipi.eprostor.gov.si/wms-si-gurs-dts/ows',
+  kgi: 'https://ipi.eprostor.gov.si/wms-si-gurs-kgi/ows',
+  pa:  'https://ipi.eprostor.gov.si/wms-si-mnvp-pa/ows',
+};
+const ATTR_GURS = '&copy; <a href="https://www.e-prostor.gov.si/" target="_blank" rel="noopener">GURS</a> CC BY 4.0';
+const ATTR_PA   = '&copy; <a href="https://www.gov.si/" target="_blank" rel="noopener">MNVP</a> PIS';
+proj4.defs('EPSG:3794','+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9999 +x_0=500000 +y_0=-5000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+const toD96 = (lat,lng)=>proj4('EPSG:4326','EPSG:3794',[lng,lat]);
+const fromD96 = (e,n)=>{const [lng,lat]=proj4('EPSG:3794','EPSG:4326',[e,n]);return [lat,lng];};
+
+/* ---------- zemljevid ---------- */
+const map = L.map('map',{zoomControl:true,minZoom:7,maxZoom:21,attributionControl:true}).setView([46.12,14.82],8);
+L.control.scale({imperial:false,position:'bottomright'}).addTo(map);
+map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+
+const BASES = {
+  osm:  {name:'OSM', layer:L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,maxNativeZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'})},
+  dof:  {name:'Ortofoto', layer:L.tileLayer.wms(SRC.dts,{layers:'SI.GURS.ZPDZ:DOF025_3857',format:'image/jpeg',version:'1.3.0',maxZoom:21,attribution:ATTR_GURS})},
+  dtk:  {name:'DTK 50', layer:L.tileLayer.wms(SRC.dts,{layers:'SI.GURS.DK:DTK50',format:'image/jpeg',version:'1.3.0',maxZoom:21,attribution:ATTR_GURS})},
+  lidar:{name:'Lidar', layer:L.tileLayer.wms(SRC.dts,{layers:'SI.GURS.ZPDZ:LIDAR',format:'image/jpeg',version:'1.3.0',maxZoom:21,attribution:ATTR_GURS})},
+  ttn:  {name:'TTN 5/10', layer:L.tileLayer.wms(SRC.dts,{layers:'SI.GURS.DK:TTN5_TTN10',format:'image/png',version:'1.3.0',maxZoom:21,attribution:ATTR_GURS})},
+  none: {name:'Brez', layer:L.layerGroup()},
+};
+let curBase='osm';
+function setBase(k){ if(BASES[curBase]) map.removeLayer(BASES[curBase].layer); curBase=k; BASES[k].layer.addTo(map); BASES[k].layer.bringToBack?.();
+  document.querySelectorAll('#basemaps button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===k)); saveState(); }
+const bm=document.getElementById('basemaps');
+for(const k in BASES){const b=document.createElement('button');b.type='button';b.dataset.k=k;b.textContent=BASES[k].name;b.onclick=()=>setBase(k);bm.appendChild(b);}
+
+/* overlay layers: {id, group, name, url, layers, styles?, color, on, opacity, query:[layers to GetFeatureInfo]} */
+const OVER = [
+ {id:'parc', g:'Kataster nepremičnin', name:'Parcele + oznake', url:SRC.kn, layers:'SI.GURS.KN:PARCELE,SI.GURS.KN:OSNOVNI_PARCELE_CENTROID', styles:'nep_kn_parcele,nep_kn_parcele_cent_lbl', color:'#2fa15e', on:true, z:650},
+ {id:'meje', g:'Kataster nepremičnin', name:'Urejene meje', url:SRC.kn, layers:'SI.GURS.KN:UREJENE_MEJE', color:'#7be09e', on:false, z:640},
+ {id:'stav', g:'Kataster nepremičnin', name:'Stavbe', url:SRC.kn, layers:'SI.GURS.KN:STAVBE_TLORIS', styles:'nep_kn_stavbe', color:'#f08a24', on:true, z:645},
+ {id:'hs',   g:'Kataster nepremičnin', name:'Hišne številke', url:SRC.kn, layers:'SI.GURS.KN:HISNE_STEVILKE', styles:'nep_rpe_hs_lbl', color:'#333', on:false, z:660},
+ {id:'ko',   g:'Kataster nepremičnin', name:'Meje katastrskih občin', url:SRC.kn, layers:'SI.GURS.KN:KATASTRSKE_OBCINE', styles:'nep_kn_katastrske_obcine', color:'#9fd6b4', on:false, z:630},
+ {id:'javl', g:'Kataster nepremičnin', name:'Parcele v javni lasti (RS / občina)', url:SRC.kn, layers:'SI.GURS.KN:PARCELE_JAVNI_LASTNIKI', color:'#d33', on:false, z:610, opacity:.7},
+ {id:'slu',  g:'Kataster nepremičnin', name:'Služnosti, stavbna pravica', url:SRC.kn, layers:'SI.GURS.KN:OBMOCJA_SP_PRAVIC', color:'#2b6cff', on:false, z:635},
+ {id:'nrp',  g:'Prostorski akti (OPN)', name:'Namenska raba prostora', url:SRC.pa, layers:'SI.MNVP.PA:NRP_OPN', color:'#e9c46a', on:false, z:500, opacity:.55, slider:true},
+ {id:'nrpl', g:'Prostorski akti (OPN)', name:'Oznake namenske rabe', url:SRC.pa, layers:'SI.MNVP.PA:NRP_OPN', styles:'eplan_nam_raba_skupna_oznake', color:'#555', on:false, z:655},
+ {id:'eup',  g:'Prostorski akti (OPN)', name:'Enote urejanja prostora (EUP)', url:SRC.pa, layers:'SI.MNVP.PA:EUP_OPN', styles:'eplan_obmocja_eup_oznake', color:'#8e44ad', on:false, z:620},
+ {id:'peup', g:'Prostorski akti (OPN)', name:'Podenote (PEUP)', url:SRC.pa, layers:'SI.MNVP.PA:PEUP_OPN', color:'#c39bd3', on:false, z:618},
+ {id:'regc', g:'Prostorski akti (OPN)', name:'Regulacijske črte', url:SRC.pa, layers:'SI.MNVP.PA:REG_CRTE_OPN', color:'#c0392b', on:false, z:625},
+ {id:'dpn',  g:'Prostorski akti (OPN)', name:'DPN v pripravi', url:SRC.pa, layers:'SI.MNVP.PA:DPN_P', color:'#e67e22', on:false, z:615},
+ {id:'draba',g:'Raba in omejitve', name:'Dejanska raba zemljišč', url:SRC.kn, layers:'SI.GURS.KN:DEJANSKE_RABE', color:'#a3c68c', on:false, z:510, opacity:.6, slider:true},
+ {id:'bon',  g:'Raba in omejitve', name:'Boniteta zemljišč', url:SRC.kn, layers:'SI.GURS.KN:BONITETE', color:'#b5651d', on:false, z:515, opacity:.6, slider:true},
+ {id:'rez',  g:'Raba in omejitve', name:'Posebni režimi (VVO, gozdni rezervat…)', url:SRC.kn, layers:'SI.GURS.KN:POSEBNI_REZIMI', styles:'kn_nep_ost_posebni_rezimi_lbl', color:'#f39c12', on:false, z:628},
+ {id:'omej', g:'Raba in omejitve', name:'Omejitev parcelacij', url:SRC.kn, layers:'SI.GURS.KN:OMEJITVE', color:'#48c9b0', on:false, z:520, opacity:.6},
+ {id:'ggo',  g:'Raba in omejitve', name:'Gozdno-gospodarska območja', url:SRC.kn, layers:'SI.GURS.KN:GOZDNO_GOSP_OBM', color:'#f1c40f', on:false, z:522},
+ {id:'ei',   g:'Raba in omejitve', name:'Energetske izkaznice (stavbe)', url:SRC.kn, layers:'SI.GURS.KN:EI_NA_STAVBI', color:'#f4d03f', on:false, z:662},
+ {id:'ceste',g:'Gospodarska javna infrastruktura', name:'Ceste', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_CESTE_G', color:'#7f8c8d', on:false, z:600},
+ {id:'zel',  g:'Gospodarska javna infrastruktura', name:'Železnice', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_ZELEZNICE_G', color:'#34495e', on:false, z:600},
+ {id:'vod',  g:'Gospodarska javna infrastruktura', name:'Vodovod', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_VODOVOD_G', color:'#2980b9', on:false, z:600},
+ {id:'kan',  g:'Gospodarska javna infrastruktura', name:'Kanalizacija', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_KANALIZACIJA_G', color:'#8e6c3b', on:false, z:600},
+ {id:'el',   g:'Gospodarska javna infrastruktura', name:'Električna energija', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_ELEKTRICNA_ENERGIJA_G', color:'#e74c3c', on:false, z:600},
+ {id:'plin', g:'Gospodarska javna infrastruktura', name:'Zemeljski plin', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_ZEMELJSKI_PLIN_G', color:'#f1c40f', on:false, z:600},
+ {id:'ek',   g:'Gospodarska javna infrastruktura', name:'Elektronske komunikacije', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_ELEKTRONSKE_KOMUNIKACIJE_G', color:'#9b59b6', on:false, z:600},
+ {id:'topl', g:'Gospodarska javna infrastruktura', name:'Toplotna energija', url:SRC.kgi, layers:'SI.GURS.KGI:LINIJE_TOPLOTNA_ENERGIJA_G', color:'#d35400', on:false, z:600},
+];
+const overLayers={};
+OVER.forEach(o=>{
+  map.createPane('p_'+o.id); map.getPane('p_'+o.id).style.zIndex=o.z;
+  const p={layers:o.layers,format:'image/png',transparent:true,version:'1.3.0',pane:'p_'+o.id,opacity:o.opacity??1,maxZoom:21,attribution:o.url===SRC.pa?ATTR_PA:ATTR_GURS};
+  if(o.styles) p.styles=o.styles;
+  overLayers[o.id]=L.tileLayer.wms(o.url,p);
+});
+function buildLayerList(){
+  const root=document.getElementById('layers'); root.innerHTML='';
+  const groups=[...new Set(OVER.map(o=>o.g))];
+  groups.forEach(g=>{
+    const d=document.createElement('div'); d.className='grp'; d.innerHTML=`<h4>${g}</h4>`;
+    OVER.filter(o=>o.g===g).forEach(o=>{
+      const row=document.createElement('div'); row.className='lay';
+      row.innerHTML=`<input type="checkbox" id="l_${o.id}" ${o.on?'checked':''}><span class="sw" style="background:${o.color}"></span><label for="l_${o.id}">${o.name}</label>`+(o.slider?`<input type="range" id="r_${o.id}" min="10" max="100" value="${Math.round((o.opacity??1)*100)}" aria-label="Prosojnost">`:'');
+      d.appendChild(row);
+      row.querySelector('input[type=checkbox]').onchange=e=>{o.on=e.target.checked; o.on?overLayers[o.id].addTo(map):map.removeLayer(overLayers[o.id]); saveState();};
+      if(o.slider) row.querySelector('input[type=range]').oninput=e=>overLayers[o.id].setOpacity(e.target.value/100);
+    });
+    root.appendChild(d);
+  });
+}
+buildLayerList();
+
+/* ---------- stanje v URL (#z/lat/lng) + localStorage ---------- */
+function saveState(){ try{localStorage.setItem('parcelnik',JSON.stringify({base:curBase,on:OVER.filter(o=>o.on).map(o=>o.id)}));}catch(e){} }
+function loadState(){ try{const s=JSON.parse(localStorage.getItem('parcelnik')||'null'); if(s){ if(BASES[s.base]) curBase=s.base; OVER.forEach(o=>{o.on=s.on.includes(o.id); const c=document.getElementById('l_'+o.id); if(c)c.checked=o.on;}); } }catch(e){} }
+loadState();
+BASES[curBase].layer.addTo(map); document.querySelectorAll('#basemaps button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===curBase));
+OVER.forEach(o=>{ if(o.on) overLayers[o.id].addTo(map); });
+
+function writeHash(){ const c=map.getCenter(); const h=`#${map.getZoom()}/${c.lat.toFixed(5)}/${c.lng.toFixed(5)}`; history.replaceState(null,'',h+(selKey?`?p=${encodeURIComponent(selKey)}`:'')); }
+map.on('moveend',writeHash);
+(function readHash(){ const m=location.hash.match(/^#(\d+)\/(-?[\d.]+)\/(-?[\d.]+)/); if(m) map.setView([+m[2],+m[3]],+m[1]); })();
+const hp=new URLSearchParams(location.hash.split('?')[1]||'');
+
+/* ---------- status vrstica ---------- */
+const stC=document.getElementById('stCoord'), stS=document.getElementById('stScale');
+map.on('mousemove',e=>{const [E,N]=toD96(e.latlng.lat,e.latlng.lng); stC.innerHTML=`E <b>${E.toFixed(1)}</b> N <b>${N.toFixed(1)}</b> (D96/TM) · ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;});
+function updScale(){ const c=map.getCenter(); const mpp=40075016.686*Math.abs(Math.cos(c.lat*Math.PI/180))/Math.pow(2,map.getZoom()+8); stS.textContent='1 : '+Math.round(mpp*96/0.0254).toLocaleString('sl-SI'); }
+map.on('zoomend moveend',updScale); updScale();
+
+/* ---------- poizvedba ob kliku ---------- */
+const hiLayer=L.geoJSON(null,{style:{color:'#ff7a00',weight:3,fillColor:'#ff7a00',fillOpacity:.12},pane:'markerPane'}).addTo(map);
+const info=document.getElementById('info'), infoHead=document.getElementById('infoHead'), infoBody=document.getElementById('infoBody');
+let selKey=null;
+document.getElementById('infoClose').onclick=()=>{info.hidden=true;hiLayer.clearLayers();selKey=null;writeHash();};
+
+function gfiUrl(base,layers,latlng,count=10){
+  const s=map.getSize(), b=map.getBounds(), p=map.latLngToContainerPoint(latlng);
+  const q=new URLSearchParams({SERVICE:'WMS',VERSION:'1.3.0',REQUEST:'GetFeatureInfo',LAYERS:layers,QUERY_LAYERS:layers,CRS:'EPSG:4326',
+    BBOX:`${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`,WIDTH:s.x,HEIGHT:s.y,I:Math.round(p.x),J:Math.round(p.y),INFO_FORMAT:'application/json',FEATURE_COUNT:count});
+  return base+'?'+q;
+}
+const KN_Q='SI.GURS.KN:PARCELE,SI.GURS.KN:STAVBE_TLORIS,SI.GURS.KN:NAMENSKE_RABE,SI.GURS.KN:DEJANSKE_RABE,SI.GURS.KN:BONITETE,SI.GURS.KN:POSEBNI_REZIMI,SI.GURS.KN:PARCELE_JAVNI_LASTNIKI,SI.GURS.KN:OMEJITVE,SI.GURS.KN:OBMOCJA_SP_PRAVIC';
+const PA_Q='SI.MNVP.PA:NRP_OPN,SI.MNVP.PA:EUP_OPN,SI.MNVP.PA:PEUP_OPN,SI.MNVP.PA:OBM_PA_V_PRIPRAVI,SI.MNVP.PA:DPN_P';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtNum=n=>Number(n).toLocaleString('sl-SI');
+const sl=p=>Object.fromEntries(Object.entries(p).filter(([k,v])=>v!==null&&v!==''&&String(v).trim()!==''&&!/_(EN|IT|HU)$/.test(k)));
+
+map.on('click',async e=>{
+  if(map.getZoom()<14){ showInfo('<div class="eyebrow">Opozorilo</div><h2 style="font-family:var(--font);font-size:16px">Približaj zemljevid</h2>','<p class="empty">Parcele so poizvedljive pri merilu pod 1 : 10 000 (zoom ≥ 15). Približaj in klikni znova.</p>'); return; }
+  showInfo('<div class="eyebrow">Poizvedba</div><h2 style="font-family:var(--font);font-size:16px"><span class="spin"></span> Berem podatke …</h2>','');
+  hiLayer.clearLayers();
+  try{
+    const [kn,pa]=await Promise.all([
+      fetch(gfiUrl(SRC.kn,KN_Q,e.latlng,20)).then(r=>r.json()),
+      fetch(gfiUrl(SRC.pa,PA_Q,e.latlng,10)).then(r=>r.json()).catch(()=>({features:[]}))
+    ]);
+    renderClick(kn.features||[],pa.features||[],e.latlng);
+  }catch(err){ showInfo('<div class="eyebrow">Napaka</div><h2 style="font-family:var(--font);font-size:16px">Strežnik ni odgovoril</h2>',`<p class="empty">${esc(err.message)}. Poskusi znova čez nekaj sekund.</p>`); }
+});
+
+function showInfo(h,b){ infoHead.innerHTML=h; infoBody.innerHTML=b; info.hidden=false; }
+
+function renderClick(kn,pa,latlng){
+  const by=t=>kn.filter(f=>f.id.startsWith(t+'.')).map(f=>sl(f.properties));
+  const parc=by('PARCELE')[0], stav=by('STAVBE_TLORIS'), nrKN=by('NAMENSKE_RABE'), draba=by('DEJANSKE_RABE'), bon=by('BONITETE')[0], rez=by('POSEBNI_REZIMI'), javl=by('PARCELE_JAVNI_LASTNIKI')[0], omej=by('OMEJITVE'), slu=by('OBMOCJA_SP_PRAVIC');
+  const nrp=pa.filter(f=>f.id.startsWith('NRP_OPN.')).map(f=>sl(f.properties)), eup=pa.filter(f=>f.id.startsWith('EUP_OPN.')).map(f=>sl(f.properties)), peup=pa.filter(f=>f.id.startsWith('PEUP_OPN.')).map(f=>sl(f.properties)), pap=pa.filter(f=>/^(OBM_PA_V_PRIPRAVI|DPN_P)\./.test(f.id)).map(f=>sl(f.properties));
+  const [E,N]=toD96(latlng.lat,latlng.lng);
+  let head, body='';
+  if(parc){
+    selKey=`${parc.KO_ID}:${parc.ST_PARCELE}`;
+    head=`<div class="eyebrow">Parcela · k.o. ${esc(parc.NAZIV)}</div><h2>${esc(parc.ST_PARCELE)}</h2><div class="sub">${fmtNum(parc.POVRSINA)} m² · ${esc(parc.UPRAVNI_STATUSI_NAZIV_SL||'')}${parc.GRAD_PARC==='Da'?' · gradbena parcela':''}</div>`;
+    body+=`<dl class="kv">
+      <dt>ID znak</dt><dd class="m">${esc(parc.KO_ID)}-${esc(parc.ST_PARCELE)}</dd>
+      <dt>EID parcele</dt><dd class="m">${esc(parc.EID)}</dd>
+      <dt>Površina</dt><dd class="m">${fmtNum(parc.POVRSINA)} m²</dd>
+      <dt>Meja</dt><dd>${esc(parc.UPRAVNI_STATUSI_NAZIV_SL||'—')}</dd>
+      ${parc.BONITETA!=null?`<dt>Boniteta parcele</dt><dd class="m">${esc(parc.BONITETA)}</dd>`:''}
+      <dt>Omejitev parcelacije</dt><dd>${esc(parc.OMEJITEV||'Ne')}</dd>
+      <dt>Stanje podatka</dt><dd class="m">${esc((parc.DATUM_SYS||'').slice(0,10))}</dd>
+    </dl>`;
+    if(javl) body+=`<p><span class="chip">javna last</span> ${esc(javl.LASTNIK||javl.VRSTA_LASTNIKA||javl.NAZIV||'Republika Slovenija / občina')}</p>`;
+    // natančna geometrija iz WFS
+    fetchParcelGeom(parc.KO_ID,parc.ST_PARCELE);
+  } else {
+    selKey=null;
+    head=`<div class="eyebrow">Točka</div><h2 style="font-family:var(--font);font-size:17px">Tu ni parcele v katastru</h2><div class="sub">${esc(latlng.lat.toFixed(5))}, ${esc(latlng.lng.toFixed(5))}</div>`;
+  }
+  // namenska raba iz OPN
+  body+=`<div class="sec"><h3>Namenska raba (OPN)</h3>`;
+  if(nrp.length){ nrp.forEach(n=>{ body+=`<p style="margin:6px 0"><span class="chip">${esc(n.NRP_OZN)}</span> ${esc(n.NRP_OPIS)}${n.EUP_OZN&&n.EUP_OZN.trim()?` · EUP <b class="m" style="font-family:var(--mono)">${esc(n.EUP_OZN.trim())}</b>`:''}${n.OPPN_P==='DA'?' · <span class="chip w">predviden OPPN</span>':''}<br><small style="color:var(--fg-3)">${esc(n.NAZIV_PA)} (veljaven od ${esc((n.DATUM_VEL||'').slice(0,10))})</small></p>`; }); }
+  else if(nrKN.length){ nrKN.forEach(n=>body+=`<p style="margin:6px 0"><span class="chip">${esc(n.PODROBNE_NAMENSKE_RABE_NAZIV_SL)}</span> ${esc(n.PODROBNE_NAMENSKE_RABE_OPIS_SL)} <small style="color:var(--fg-3)">(informativni sloj KN)</small></p>`); }
+  else body+=`<p class="note">Občina še nima OPN v PIS ali točka ni v območju akta.</p>`;
+  if(peup.length) body+=`<p class="note">PEUP: ${peup.map(p=>esc(p.PEUP_OZN||p.OZNAKA||'')).join(', ')}</p>`;
+  if(pap.length) body+=`<p><span class="chip w">prostorski akt v pripravi</span> ${pap.map(p=>esc(p.NAZIV_PA||p.NAZIV||'')).join('; ')}</p>`;
+  body+=`</div>`;
+  // raba, boniteta, režimi
+  if(draba.length||bon||rez.length||omej.length||slu.length){
+    body+=`<div class="sec"><h3>Dejanska raba in omejitve</h3><dl class="kv">`;
+    if(draba.length) body+=`<dt>Dejanska raba</dt><dd>${[...new Set(draba.map(d=>d.MASKA_IME))].map(esc).join(', ')}</dd>`;
+    if(bon) body+=`<dt>Boniteta</dt><dd class="m">${esc(bon.BONITETA)} <small style="color:var(--fg-3)">(tla ${esc(bon.TOCKE_TLA)}, klima ${esc(bon.TOCKE_KLIMA)}, relief ${esc(bon.TOCKE_RELIEF)})</small></dd>`;
+    if(rez.length) body+=`<dt>Posebni režimi</dt><dd>${rez.map(r=>esc(Object.values(r).filter(v=>typeof v==='string').join(' '))).join('<br>')}</dd>`;
+    if(omej.length) body+=`<dt>Omejitev</dt><dd>${omej.map(o=>esc(o.OPIS||o.NAZIV||'območje soglasij')).join('<br>')}</dd>`;
+    if(slu.length) body+=`<dt>Služnost / stavbna pravica</dt><dd>${slu.map(s=>esc(s.VRSTA||s.NAZIV||'da')).join('<br>')}</dd>`;
+    body+=`</dl></div>`;
+  }
+  // stavbe
+  if(stav.length){
+    body+=`<div class="sec"><h3>Stavba</h3>`;
+    stav.forEach(s=>{ const k=Object.entries(s).filter(([k])=>!/^(EID|GEOM|DATUM_SYS|.*_ID|.*_SIFRA)$/.test(k)).slice(0,12);
+      body+=`<dl class="kv">${k.map(([a,b])=>`<dt>${esc(a.toLowerCase().replace(/_naziv_sl|_sl$/,'').replace(/_/g,' '))}</dt><dd class="m">${esc(b)}</dd>`).join('')}</dl>`; });
+    body+=`</div>`;
+  }
+  // povezave
+  const ko=parc?parc.KO_ID:'', pn=parc?parc.ST_PARCELE:'';
+  body+=`<div class="sec"><h3>Uradni izpisi in viri</h3><div class="links">
+    <a class="p" href="https://evlozisce.sodisce.si/esodstvo/index.html" target="_blank" rel="noopener">${ic('doc')} Zemljiška knjiga (e-Sodstvo)</a>
+    <a href="https://ipi.eprostor.gov.si/jv/" target="_blank" rel="noopener">${ic('map')} Javni vpogled GURS</a>
+    <a href="https://www.gov.si/teme/trg-nepremicnin" target="_blank" rel="noopener">${ic('eur')} Trg nepremičnin (ETN)</a>
+    <a href="https://kmetijska-zemljisca.datatart.com/" target="_blank" rel="noopener">${ic('farm')} Kmetijska zemljišča naprodaj (UE)</a>
+    <a href="https://e-uprava.gov.si/si/e-uprava/oglasnadeska.html" target="_blank" rel="noopener">${ic('board')} Oglasna deska e-uprava</a>
+    <button type="button" id="copyId">${ic('copy')} Kopiraj ID ${esc(ko)}-${esc(pn)}</button>
+    <button type="button" id="copyLink">${ic('link')} Kopiraj povezavo</button>
+  </div>
+  <p class="note">Lastništvo je v zemljiški knjigi: v e-Sodstvu izberi <i>Javni vpogled → Redni izpis</i> in vnesi k.o. <b>${esc(ko)}</b>, parcela <b>${esc(pn)}</b>. Vpogled je brezplačen, zahteva pa enkratno registracijo.</p>
+  <p class="note" style="font-family:var(--mono)">E ${E.toFixed(2)} N ${N.toFixed(2)} (D96/TM) · ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}</p></div>`;
+  showInfo(head,body);
+  const cp=(txt,btn)=>{ navigator.clipboard?.writeText(txt).then(()=>{const o=btn.innerHTML;btn.innerHTML=ic('ok')+' Kopirano';setTimeout(()=>btn.innerHTML=o,1500);}).catch(()=>{prompt('Kopiraj:',txt);}); };
+  document.getElementById('copyId').onclick=ev=>cp(`${ko}-${pn}`,ev.currentTarget);
+  document.getElementById('copyLink').onclick=ev=>{writeHash();cp(location.href,ev.currentTarget);};
+  writeHash();
+}
+function ic(n){const d={doc:'M3 1h7l3 3v11H3z M6 8h4M6 11h4',map:'M2 4l4-2 4 2 4-2v10l-4 2-4-2-4 2z',eur:'M11 4a4 4 0 100 8M2 6h7M2 9h7',farm:'M2 14V7l6-4 6 4v7M6 14V9h4v5',board:'M2 3h12v8H2zM6 14h4M8 11v3',copy:'M5 5h8v9H5zM3 11V2h8',link:'M6 10l4-4M4 8L2.5 9.5a2.5 2.5 0 003.5 3.5L7.5 11.5M9 4.5l1.5-1.5a2.5 2.5 0 013.5 3.5L12.5 8',ok:'M3 8l3 3 7-7'}[n];return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="${d}"/></svg>`;}
+
+async function fetchParcelGeom(ko,st){
+  try{
+    const u=`${SRC.knWfs}?service=WFS&version=2.0.0&request=GetFeature&typeNames=SI.GURS.KN:PARCELE&outputFormat=application/json&srsName=EPSG:4326&count=1&CQL_FILTER=${encodeURIComponent(`KO_ID=${+ko} AND ST_PARCELE='${st.replace(/'/g,"''")}'`)}`;
+    const j=await fetch(u).then(r=>r.json()); hiLayer.clearLayers(); if(j.features?.length){ hiLayer.addData(j.features[0]); }
+    return j.features?.[0];
+  }catch(e){ return null; }
+}
+
+/* ---------- iskanje ---------- */
+const q=document.getElementById('q'), sugg=document.getElementById('sugg');
+let sTimer=null, sItems=[], sIdx=-1;
+q.addEventListener('input',()=>{clearTimeout(sTimer); sTimer=setTimeout(suggest,300);});
+q.addEventListener('keydown',e=>{ if(sugg.hidden)return; if(e.key==='ArrowDown'){sIdx=Math.min(sIdx+1,sItems.length-1);mark();e.preventDefault();} else if(e.key==='ArrowUp'){sIdx=Math.max(sIdx-1,0);mark();e.preventDefault();} else if(e.key==='Escape'){sugg.hidden=true;} });
+document.addEventListener('click',e=>{ if(!e.target.closest('.search')) sugg.hidden=true; });
+function mark(){ [...sugg.children].forEach((c,i)=>c.classList.toggle('on',i===sIdx)); }
+function parseParcel(t){
+  // "850 430/17", "850-430/17", "slovenj gradec 430/17", "430/17 slovenj gradec"
+  let m=t.match(/^\s*(\d{1,4})\s*[-\s]\s*(\d+(?:\/\d+)?)\s*$/); if(m) return {koId:+m[1],st:m[2]};
+  m=t.match(/^\s*(.+?)\s+(\d+\/\d+|\d+)\s*$/); if(m&&isNaN(m[1])) return {koName:m[1],st:m[2]};
+  m=t.match(/^\s*(\d+\/\d+)\s+(.+?)\s*$/); if(m) return {koName:m[2],st:m[1]};
+  return null;
+}
+async function suggest(){
+  const t=q.value.trim(); sItems=[]; sIdx=-1; if(t.length<2){sugg.hidden=true;return;}
+  const p=parseParcel(t); let items=[];
+  try{
+    if(p){
+      const f=p.koId?`KO_ID=${p.koId} AND ST_PARCELE='${p.st}'`:`NAZIV ILIKE '%${p.koName.replace(/'/g,"''")}%' AND ST_PARCELE='${p.st}'`;
+      const j=await fetch(`${SRC.knWfs}?service=WFS&version=2.0.0&request=GetFeature&typeNames=SI.GURS.KN:PARCELE&outputFormat=application/json&srsName=EPSG:4326&count=8&CQL_FILTER=${encodeURIComponent(f)}`).then(r=>r.json());
+      items=(j.features||[]).map(ft=>({t:`Parcela ${ft.properties.ST_PARCELE}`,s:`k.o. ${ft.properties.NAZIV} · ${fmtNum(ft.properties.POVRSINA)} m²`,geo:ft}));
+    }
+    if(!items.length){
+      // naslov iz registra naslovov: "Gozdna pot 1, Slovenj Gradec" ali "Gozdna pot 1"
+      const a=t.match(/^\s*([^\d,]+?)\s+(\d+)\s*([a-zA-Z])?\s*(?:,\s*(.+))?$/);
+      if(a){
+        let f=`ULICA_NAZIV ILIKE '${a[1].trim().replace(/'/g,"''")}%' AND HS_STEVILKA=${+a[2]}`;
+        if(a[3]) f+=` AND HS_DODATEK ILIKE '${a[3]}'`;
+        if(a[4]) f+=` AND (NASELJE_NAZIV ILIKE '${a[4].trim().replace(/'/g,"''")}%' OR POSTNI_OKOLIS_NAZIV ILIKE '${a[4].trim().replace(/'/g,"''")}%')`;
+        const j=await fetch(`${SRC.rnWfs}?service=WFS&version=2.0.0&request=GetFeature&typeNames=SI.GURS.RN:REGISTER_NASLOVOV&outputFormat=application/json&count=8&CQL_FILTER=${encodeURIComponent(f)}`).then(r=>r.json());
+        items=(j.features||[]).map(ft=>{const p=ft.properties; return {t:`${p.ULICA_NAZIV||p.NASELJE_NAZIV} ${p.HS_STEVILKA}${p.HS_DODATEK||''}`,s:`${p.POSTNI_OKOLIS_SIFRA} ${p.NASELJE_NAZIV} · ${p.OBCINA_NAZIV}`,ll:fromD96(p.E,p.N),z:18};});
+      }
+    }
+    if(!items.length){
+      // kraj / naselje (OSM Nominatim)
+      const j=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=si&limit=6&q=${encodeURIComponent(t)}`,{headers:{'Accept-Language':'sl'}}).then(r=>r.json());
+      items=j.map(r=>({t:r.display_name.split(',')[0],s:r.display_name.split(',').slice(1,4).join(',').trim(),ll:[+r.lat,+r.lon],z:r.type==='administrative'?13:16}));
+    }
+  }catch(e){}
+  sItems=items; sugg.innerHTML=items.length?items.map(i=>`<div>${esc(i.t)}<small>${esc(i.s)}</small></div>`).join(''):'<div><small>Ni zadetkov</small></div>';
+  sugg.hidden=false; [...sugg.children].forEach((c,i)=>c.onclick=()=>pick(i));
+}
+function pick(i){ const it=sItems[i]; if(!it)return; sugg.hidden=true; q.value=it.t;
+  if(it.geo){ hiLayer.clearLayers(); hiLayer.addData(it.geo); map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); const c=hiLayer.getBounds().getCenter(); setTimeout(()=>map.fire('click',{latlng:c}),400); }
+  else { map.setView(it.ll,it.z||17); L.circleMarker(it.ll,{radius:7,color:'#ff7a00',weight:3,fillOpacity:.2}).addTo(map); }
+}
+document.getElementById('sform').onsubmit=async e=>{ e.preventDefault(); if(sIdx>=0&&sItems[sIdx]) return pick(sIdx); await suggest(); if(sItems.length) pick(0); };
+
+/* ---------- gumbi ---------- */
+const dock=document.getElementById('dock'), tg=document.getElementById('tgLayers');
+tg.onclick=()=>{dock.hidden=!dock.hidden;tg.setAttribute('aria-pressed',!dock.hidden);};
+document.getElementById('dockClose').onclick=()=>tg.click();
+if(matchMedia('(max-width:760px)').matches){dock.hidden=true;tg.setAttribute('aria-pressed','false');}
+document.getElementById('tgLoc').onclick=()=>map.locate({setView:true,maxZoom:18});
+map.on('locationfound',e=>L.circleMarker(e.latlng,{radius:7,color:'#2b6cff',fillOpacity:.3}).addTo(map));
+
+/* deep link ?p=KO:ST */
+if(hp.get('p')){ const [ko,st]=hp.get('p').split(':'); fetchParcelGeom(ko,st).then(f=>{ if(f){ map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); setTimeout(()=>map.fire('click',{latlng:hiLayer.getBounds().getCenter()}),500);} }); }
+</script>
+</body>
+</html>
