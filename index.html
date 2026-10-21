@@ -391,6 +391,7 @@ function renderClick(kn,pa,latlng){
 }
 function ic(n){const d={doc:'M3 1h7l3 3v11H3z M6 8h4M6 11h4',map:'M2 4l4-2 4 2 4-2v10l-4 2-4-2-4 2z',eur:'M11 4a4 4 0 100 8M2 6h7M2 9h7',farm:'M2 14V7l6-4 6 4v7M6 14V9h4v5',board:'M2 3h12v8H2zM6 14h4M8 11v3',copy:'M5 5h8v9H5zM3 11V2h8',link:'M6 10l4-4M4 8L2.5 9.5a2.5 2.5 0 003.5 3.5L7.5 11.5M9 4.5l1.5-1.5a2.5 2.5 0 013.5 3.5L12.5 8',ok:'M3 8l3 3 7-7'}[n];return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="${d}"/></svg>`;}
 
+function centroidOf(f){ const p=f.properties||{}; if(p.E_CEN&&p.N_CEN){const [lat,lng]=fromD96(p.E_CEN,p.N_CEN);return L.latLng(lat,lng);} return L.geoJSON(f).getBounds().getCenter(); }
 async function fetchParcelGeom(ko,st){
   try{
     const u=`${SRC.knWfs}?service=WFS&version=2.0.0&request=GetFeature&typeNames=SI.GURS.KN:PARCELE&outputFormat=application/json&srsName=EPSG:4326&count=1&CQL_FILTER=${encodeURIComponent(`KO_ID=${+ko} AND ST_PARCELE='${st.replace(/'/g,"''")}'`)}`;
@@ -443,7 +444,7 @@ async function suggest(){
   sugg.hidden=false; [...sugg.children].forEach((c,i)=>c.onclick=()=>pick(i));
 }
 function pick(i){ const it=sItems[i]; if(!it)return; sugg.hidden=true; q.value=it.t;
-  if(it.geo){ hiLayer.clearLayers(); hiLayer.addData(it.geo); map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); const c=hiLayer.getBounds().getCenter(); setTimeout(()=>map.fire('click',{latlng:c}),400); }
+  if(it.geo){ hiLayer.clearLayers(); hiLayer.addData(it.geo); map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); const c=centroidOf(it.geo); setTimeout(()=>map.fire('click',{latlng:c}),400); }
   else { map.setView(it.ll,it.z||17); L.circleMarker(it.ll,{radius:7,color:'#ff7a00',weight:3,fillOpacity:.2}).addTo(map); }
 }
 document.getElementById('sform').onsubmit=async e=>{ e.preventDefault(); if(sIdx>=0&&sItems[sIdx]) return pick(sIdx); await suggest(); if(sItems.length) pick(0); };
@@ -457,7 +458,7 @@ document.getElementById('tgLoc').onclick=()=>map.locate({setView:true,maxZoom:18
 map.on('locationfound',e=>L.circleMarker(e.latlng,{radius:7,color:'#2b6cff',fillOpacity:.3}).addTo(map));
 
 /* deep link ?p=KO:ST */
-if(hp.get('p')){ const [ko,st]=hp.get('p').split(':'); fetchParcelGeom(ko,st).then(f=>{ if(f){ map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); setTimeout(()=>map.fire('click',{latlng:hiLayer.getBounds().getCenter()}),500);} }); }
+if(hp.get('p')){ const [ko,st]=hp.get('p').split(':'); fetchParcelGeom(ko,st).then(f=>{ if(f){ map.fitBounds(hiLayer.getBounds(),{maxZoom:19,padding:[40,40]}); setTimeout(()=>map.fire('click',{latlng:centroidOf(f)}),500);} }); }
 </script>
 </body>
 </html>
