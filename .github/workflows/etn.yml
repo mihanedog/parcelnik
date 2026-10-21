@@ -1,0 +1,21 @@
+name: ETN (kupoprodajni posli)
+on:
+  schedule: [{cron: "17 4 * * 1"}]   # vsak ponedeljek
+  workflow_dispatch:
+    inputs:
+      years: {description: "Leta (presledek), prazno = zadnjih 5", default: ""}
+permissions: {contents: write}
+concurrency: {group: data, cancel-in-progress: false}
+jobs:
+  etn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python scripts/etn.py ${{ github.event.inputs.years }}
+      - name: Commit
+        run: |
+          git config user.name "parcelnik-bot" && git config user.email "bot@parcelnik"
+          git add data/etn && git diff --cached --quiet || git commit -m "ETN: osveži podatke ($(date -u +%F))"
+          git pull --rebase origin main && git push

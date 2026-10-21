@@ -1,0 +1,26 @@
+name: Kmetijske ponudbe (UE)
+on:
+  schedule: [{cron: "41 3 * * *"}]   # vsak dan
+  workflow_dispatch:
+    inputs:
+      max_new: {description: "Največ novih PDF-jev (OCR)", default: "120"}
+permissions: {contents: write}
+concurrency: {group: data, cancel-in-progress: false}
+jobs:
+  kmetijska:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-slv >/dev/null
+          pip install -q pyproj
+      - run: python scripts/kmetijska.py
+        env: {MAX_NEW: "${{ github.event.inputs.max_new || '120' }}"}
+      - name: Commit
+        run: |
+          git config user.name "parcelnik-bot" && git config user.email "bot@parcelnik"
+          git add data/kmetijska.geojson data/kmetijska_cache.json && git diff --cached --quiet || git commit -m "Kmetijske ponudbe: osveži ($(date -u +%F))"
+          git pull --rebase origin main && git push
