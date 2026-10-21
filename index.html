@@ -178,15 +178,15 @@ a{color:var(--accent-ink)}
         <div class="row wrap" id="etnKinds">
           <label class="pill"><input type="checkbox" value="stan" checked> stanovanja</label>
           <label class="pill"><input type="checkbox" value="hisa" checked> hiše</label>
-          <label class="pill"><input type="checkbox" value="posl" checked> poslovni, drugi deli stavb</label>
+          <label class="pill"><input type="checkbox" value="posl" checked> garaže, poslovni, drugi deli</label>
           <label class="pill"><input type="checkbox" value="zst" checked> stavbna zemljišča</label>
           <label class="pill"><input type="checkbox" value="zkm" checked> kmetijska</label>
           <label class="pill"><input type="checkbox" value="zgo" checked> gozdna</label>
-          <label class="pill"><input type="checkbox" value="zdr" checked> druga zemljišča</label>
+          <label class="pill"><input type="checkbox" value="zdr" checked> dvorišča, ceste, druga</label>
         </div>
         <div class="row"><label>Cena €</label><input type="number" id="etnC0" placeholder="od" min="0"><input type="number" id="etnC1" placeholder="do" min="0"></div>
         <div class="row"><label>€/m²</label><input type="number" id="etnM0" placeholder="od" min="0"><input type="number" id="etnM1" placeholder="do" min="0"></div>
-        <div class="row"><label class="pill"><input type="checkbox" id="etnTrz" checked> samo tržne prodaje</label></div>
+        <div class="row"><label class="pill"><input type="checkbox" id="etnTrz" checked> brez netržnih poslov</label></div>
         <p class="note" id="etnNote"></p>
       </div>
       <div class="lay"><input type="checkbox" id="l_kme"><span class="sw" style="background:#f0a30a"></span><label for="l_kme">Kmetijska zemljišča naprodaj (UE)</label><span class="cnt" id="kmeCnt"></span></div>
@@ -526,8 +526,8 @@ const ETN={idx:null,cache:new Map(),layer:L.layerGroup(),on:false,min:12,recs:[]
 map.createPane('p_etn'); map.getPane('p_etn').style.zIndex=680;
 const etnEl={on:document.getElementById('l_etn'),f:document.getElementById('etnFilters'),y0:document.getElementById('etnY0'),y1:document.getElementById('etnY1'),c0:document.getElementById('etnC0'),c1:document.getElementById('etnC1'),m0:document.getElementById('etnM0'),m1:document.getElementById('etnM1'),trz:document.getElementById('etnTrz'),note:document.getElementById('etnNote'),cnt:document.getElementById('etnCnt')};
 function etnKind(r){
-  if(r.t==='s'){ const x=(r.raba||'').toLowerCase(); if(/stanovanje|stanovanj/.test(x)&&!/hi[šs]a/.test(x)) return 'stan'; if(/hi[šs]a|enostanovanjsk|dvostanovanjsk|vrstna|samostoje/.test(x)) return 'hisa'; return 'posl'; }
-  const x=(r.vzn||'').toLowerCase(); if(/gradi|stavb|komunal/.test(x)) return 'zst'; if(/kmetij|njiv|travn|sadovn|vinograd/.test(x)) return 'zkm'; if(/gozd/.test(x)) return 'zgo'; return 'zdr';
+  if(r.t==='s'){ const c=parseInt(r.raba)||0; if(c===2) return 'stan'; if(c===1||c===47) return 'hisa'; return 'posl'; }
+  const c=parseInt(r.vz)||0; if(c>=1&&c<=4) return 'zst'; if(c===7||c===8) return 'zkm'; if(c===9) return 'zgo'; return 'zdr';
 }
 const KIND_COL={stan:'#d64f8c',hisa:'#e07b2a',posl:'#7a5cc7',zst:'#2b8ad6',zkm:'#3aa655',zgo:'#1f6b3a',zdr:'#8a8f93'};
 const KIND_NAME={stan:'stanovanje',hisa:'hiša',posl:'del stavbe',zst:'stavbno zemljišče',zkm:'kmetijsko zemljišče',zgo:'gozd',zdr:'zemljišče'};
@@ -549,7 +549,7 @@ async function etnRefresh(){
     const all=(await Promise.all(jobs)).flat();
     ETN.layer.clearLayers(); let n=0, shown=0; const LIMIT=3000; ETN.recs=[];
     for(const r of all){
-      const k=etnKind(r); if(!f.kinds.has(k)) continue; if(f.trz&&r.trz!=='5'&&r.trz!=='') continue;
+      const k=etnKind(r); if(!f.kinds.has(k)) continue; if(f.trz&&(r.trz==='3'||r.trz==='4')) continue;
       const cena=r.cena??r.cena_posla; if(cena!=null&&(cena<f.c0||cena>f.c1)) continue; if(r.m2!=null&&(r.m2<f.m0||r.m2>f.m1)) continue; if(r.m2==null&&(f.m0>0||f.m1<Infinity)) continue;
       const [lat,lng]=fromD96(r.e,r.nn); if(!b.contains([lat,lng])) continue; n++; if(shown>=LIMIT) continue; shown++;
       const m=L.circleMarker([lat,lng],{radius:r.t==='s'?6:5,color:'#fff',weight:1.2,fillColor:KIND_COL[k],fillOpacity:.9,pane:'p_etn'}).addTo(ETN.layer);
