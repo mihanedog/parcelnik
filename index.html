@@ -208,7 +208,7 @@ for(const k in BASES){const b=document.createElement('button');b.type='button';b
 const OVER = [
  {id:'parc', g:'Kataster nepremičnin', name:'Parcele + oznake', url:SRC.kn, layers:'SI.GURS.KN:PARCELE,SI.GURS.KN:OSNOVNI_PARCELE_CENTROID', styles:'nep_kn_parcele,nep_kn_parcele_cent_lbl', color:'#2fa15e', on:true, z:650},
  {id:'meje', g:'Kataster nepremičnin', name:'Urejene meje', url:SRC.kn, layers:'SI.GURS.KN:UREJENE_MEJE', color:'#7be09e', on:false, z:640},
- {id:'stav', g:'Kataster nepremičnin', name:'Stavbe', url:SRC.kn, layers:'SI.GURS.KN:STAVBE_TLORIS', styles:'nep_kn_stavbe', color:'#f08a24', on:true, z:645},
+ {id:'stav', g:'Kataster nepremičnin', name:'Stavbe', url:SRC.kn, layers:'SI.GURS.KN:STAVBE', color:'#f08a24', on:true, z:645},
  {id:'hs',   g:'Kataster nepremičnin', name:'Hišne številke', url:SRC.kn, layers:'SI.GURS.KN:HISNE_STEVILKE', styles:'nep_rpe_hs_lbl', color:'#333', on:false, z:660},
  {id:'ko',   g:'Kataster nepremičnin', name:'Meje katastrskih občin', url:SRC.kn, layers:'SI.GURS.KN:KATASTRSKE_OBCINE', styles:'nep_kn_katastrske_obcine', color:'#9fd6b4', on:false, z:630},
  {id:'javl', g:'Kataster nepremičnin', name:'Parcele v javni lasti (RS / občina)', url:SRC.kn, layers:'SI.GURS.KN:PARCELE_JAVNI_LASTNIKI', color:'#d33', on:false, z:610, opacity:.7},
@@ -283,12 +283,14 @@ const info=document.getElementById('info'), infoHead=document.getElementById('in
 document.getElementById('infoClose').onclick=()=>{info.hidden=true;hiLayer.clearLayers();selKey=null;writeHash();};
 
 function gfiUrl(base,layers,latlng,count=10){
-  const s=map.getSize(), b=map.getBounds(), p=map.latLngToContainerPoint(latlng);
+  // fiksno okno 101×101 px okoli klika v merilu trenutnega zooma (neodvisno od velikosti zaslona)
+  const mpp=40075016.686*Math.cos(latlng.lat*Math.PI/180)/Math.pow(2,map.getZoom()+8), half=50.5*mpp;
+  const dLat=half/111320, dLng=half/(111320*Math.cos(latlng.lat*Math.PI/180));
   const q=new URLSearchParams({SERVICE:'WMS',VERSION:'1.3.0',REQUEST:'GetFeatureInfo',LAYERS:layers,QUERY_LAYERS:layers,CRS:'EPSG:4326',
-    BBOX:`${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`,WIDTH:s.x,HEIGHT:s.y,I:Math.round(p.x),J:Math.round(p.y),INFO_FORMAT:'application/json',FEATURE_COUNT:count});
+    BBOX:`${latlng.lat-dLat},${latlng.lng-dLng},${latlng.lat+dLat},${latlng.lng+dLng}`,WIDTH:101,HEIGHT:101,I:50,J:50,INFO_FORMAT:'application/json',FEATURE_COUNT:count});
   return base+'?'+q;
 }
-const KN_Q='SI.GURS.KN:PARCELE,SI.GURS.KN:STAVBE_TLORIS,SI.GURS.KN:NAMENSKE_RABE,SI.GURS.KN:DEJANSKE_RABE,SI.GURS.KN:BONITETE,SI.GURS.KN:POSEBNI_REZIMI,SI.GURS.KN:PARCELE_JAVNI_LASTNIKI,SI.GURS.KN:OMEJITVE,SI.GURS.KN:OBMOCJA_SP_PRAVIC';
+const KN_Q='SI.GURS.KN:PARCELE,SI.GURS.KN:STAVBE,SI.GURS.KN:NAMENSKE_RABE,SI.GURS.KN:DEJANSKE_RABE,SI.GURS.KN:BONITETE,SI.GURS.KN:POSEBNI_REZIMI,SI.GURS.KN:PARCELE_JAVNI_LASTNIKI,SI.GURS.KN:OMEJITVE,SI.GURS.KN:OBMOCJA_SP_PRAVIC';
 const PA_Q='SI.MNVP.PA:NRP_OPN,SI.MNVP.PA:EUP_OPN,SI.MNVP.PA:PEUP_OPN,SI.MNVP.PA:OBM_PA_V_PRIPRAVI,SI.MNVP.PA:DPN_P';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtNum=n=>Number(n).toLocaleString('sl-SI');
@@ -309,9 +311,15 @@ map.on('click',async e=>{
 
 function showInfo(h,b){ infoHead.innerHTML=h; infoBody.innerHTML=b; info.hidden=false; }
 
+function pip(pt,geom){ // točka v (multi)poligonu, ray-cast po zunanjem obroču
+  if(!geom) return true; const rings=geom.type==='Polygon'?[geom.coordinates[0]]:geom.type==='MultiPolygon'?geom.coordinates.map(p=>p[0]):[];
+  if(!rings.length) return true; const x=pt.lng,y=pt.lat;
+  return rings.some(r=>{let inside=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;}return inside;});
+}
 function renderClick(kn,pa,latlng){
-  const by=t=>kn.filter(f=>f.id.startsWith(t+'.')).map(f=>sl(f.properties));
-  const parc=by('PARCELE')[0], stav=by('STAVBE_TLORIS'), nrKN=by('NAMENSKE_RABE'), draba=by('DEJANSKE_RABE'), bon=by('BONITETE')[0], rez=by('POSEBNI_REZIMI'), javl=by('PARCELE_JAVNI_LASTNIKI')[0], omej=by('OMEJITVE'), slu=by('OBMOCJA_SP_PRAVIC');
+  const by=t=>{const a=kn.filter(f=>f.id.startsWith(t+'.'));const inside=a.filter(f=>pip(latlng,f.geometry));return (inside.length?inside:a).map(f=>sl(f.properties));};
+  const parc=by('PARCELE')[0], stav=by('STAVBE'), nrKN=by('NAMENSKE_RABE'), draba=by('DEJANSKE_RABE'), bon=by('BONITETE')[0], rez=by('POSEBNI_REZIMI'), omej=by('OMEJITVE'), slu=by('OBMOCJA_SP_PRAVIC');
+  const javl=parc?kn.filter(f=>f.id.startsWith('PARCELE_JAVNI_LASTNIKI.')).map(f=>f.properties).find(p=>p.EID_PARCELA===parc.EID):null;
   const nrp=pa.filter(f=>f.id.startsWith('NRP_OPN.')).map(f=>sl(f.properties)), eup=pa.filter(f=>f.id.startsWith('EUP_OPN.')).map(f=>sl(f.properties)), peup=pa.filter(f=>f.id.startsWith('PEUP_OPN.')).map(f=>sl(f.properties)), pap=pa.filter(f=>/^(OBM_PA_V_PRIPRAVI|DPN_P)\./.test(f.id)).map(f=>sl(f.properties));
   const [E,N]=toD96(latlng.lat,latlng.lng);
   let head, body='';
@@ -327,7 +335,10 @@ function renderClick(kn,pa,latlng){
       <dt>Omejitev parcelacije</dt><dd>${esc(parc.OMEJITEV||'Ne')}</dd>
       <dt>Stanje podatka</dt><dd class="m">${esc((parc.DATUM_SYS||'').slice(0,10))}</dd>
     </dl>`;
-    if(javl) body+=`<p><span class="chip">javna last</span> ${esc(javl.LASTNIK||javl.VRSTA_LASTNIKA||javl.NAZIV||'Republika Slovenija / občina')}</p>`;
+    if(javl){
+      const who=[javl.LASTNIK_RS?'Republika Slovenija':null,javl.LASTNIK_OBCINA?'občina':null].filter(Boolean);
+      body+=`<dl class="kv" style="margin-top:-2px"><dt>Lastniki (ZK)</dt><dd>${who.length?`<span class="chip">javna last: ${esc(who.join(' + '))}</span> `:''}${fmtNum(javl.VSI_LASTNIKI_CNT)} ${javl.VSI_LASTNIKI_CNT==1?'lastnik':'lastnikov'}${javl.PRAVNI_LASTNIKI_CNT?`, od tega ${fmtNum(javl.PRAVNI_LASTNIKI_CNT)} pravn${javl.PRAVNI_LASTNIKI_CNT==1?'a oseba':'ih oseb'}`:''}<br><small style="color:var(--fg-3)">imena so v zemljiški knjigi (gumb spodaj)</small></dd></dl>`;
+    }
     // natančna geometrija iz WFS
     fetchParcelGeom(parc.KO_ID,parc.ST_PARCELE);
   } else {
@@ -419,7 +430,7 @@ async function suggest(){
         if(a[3]) f+=` AND HS_DODATEK ILIKE '${a[3]}'`;
         if(a[4]) f+=` AND (NASELJE_NAZIV ILIKE '${a[4].trim().replace(/'/g,"''")}%' OR POSTNI_OKOLIS_NAZIV ILIKE '${a[4].trim().replace(/'/g,"''")}%')`;
         const j=await fetch(`${SRC.rnWfs}?service=WFS&version=2.0.0&request=GetFeature&typeNames=SI.GURS.RN:REGISTER_NASLOVOV&outputFormat=application/json&count=8&CQL_FILTER=${encodeURIComponent(f)}`).then(r=>r.json());
-        items=(j.features||[]).map(ft=>{const p=ft.properties; return {t:`${p.ULICA_NAZIV||p.NASELJE_NAZIV} ${p.HS_STEVILKA}${p.HS_DODATEK||''}`,s:`${p.POSTNI_OKOLIS_SIFRA} ${p.NASELJE_NAZIV} · ${p.OBCINA_NAZIV}`,ll:fromD96(p.E,p.N),z:18};});
+        const seen=new Set(); items=(j.features||[]).filter(ft=>{const k=ft.properties.EID_HISNA_STEVILKA;if(seen.has(k))return false;seen.add(k);return true;}).map(ft=>{const p=ft.properties; return {t:`${p.ULICA_NAZIV||p.NASELJE_NAZIV} ${p.HS_STEVILKA}${p.HS_DODATEK||''}`,s:`${p.POSTNI_OKOLIS_SIFRA} ${p.NASELJE_NAZIV} · ${p.OBCINA_NAZIV}`,ll:fromD96(p.E,p.N),z:18};});
       }
     }
     if(!items.length){
