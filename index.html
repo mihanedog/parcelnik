@@ -259,6 +259,7 @@ function buildLayerList(){
 buildLayerList();
 
 /* ---------- stanje v URL (#z/lat/lng) + localStorage ---------- */
+let selKey=null;
 function saveState(){ try{localStorage.setItem('parcelnik',JSON.stringify({base:curBase,on:OVER.filter(o=>o.on).map(o=>o.id)}));}catch(e){} }
 function loadState(){ try{const s=JSON.parse(localStorage.getItem('parcelnik')||'null'); if(s){ if(BASES[s.base]) curBase=s.base; OVER.forEach(o=>{o.on=s.on.includes(o.id); const c=document.getElementById('l_'+o.id); if(c)c.checked=o.on;}); } }catch(e){} }
 loadState();
@@ -279,7 +280,6 @@ map.on('zoomend moveend',updScale); updScale();
 /* ---------- poizvedba ob kliku ---------- */
 const hiLayer=L.geoJSON(null,{style:{color:'#ff7a00',weight:3,fillColor:'#ff7a00',fillOpacity:.12},pane:'markerPane'}).addTo(map);
 const info=document.getElementById('info'), infoHead=document.getElementById('infoHead'), infoBody=document.getElementById('infoBody');
-let selKey=null;
 document.getElementById('infoClose').onclick=()=>{info.hidden=true;hiLayer.clearLayers();selKey=null;writeHash();};
 
 function gfiUrl(base,layers,latlng,count=10){
